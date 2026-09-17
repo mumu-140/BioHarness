@@ -6,7 +6,7 @@
 
 **Architecture:** Implement a Python modular monolith under `src/bioharness` with immutable Pydantic domain records, explicit ports, SQLAlchemy/PostgreSQL persistence, and a generic local-process primitive. Core tests use deterministic fake providers/processes. Genome-web TF is explicitly excluded from this plan and is handled by the separate reference-integration plan after Core is working.
 
-**Tech Stack:** Python 3.12+, Pydantic 2, SQLAlchemy 2, Alembic, psycopg 3, PostgreSQL, Typer, pytest, rfc8785, Python stdlib.
+**Tech Stack:** Python 3.12+, Pydantic 2, SQLAlchemy 2, Alembic, psycopg 3, PostgreSQL 16, Typer, pytest, rfc8785, Python stdlib.
 
 **Spec:** `docs/superpowers/specs/2026-09-18-p0-runtime-kernel-design.md`
 
@@ -28,8 +28,6 @@
 ---
 
 ## File Map Locked by This Plan
-
-Core files created by this plan:
 
 ```text
 pyproject.toml
@@ -69,16 +67,13 @@ src/bioharness/application/collect_artifacts.py
 src/bioharness/application/validate_run.py
 src/bioharness/application/memory.py
 src/bioharness/cli/main.py
-```
-
-Core tests:
-
-```text
-tests/unit/
-tests/contract/
-tests/integration/
-tests/fixtures/
-tests/fakes/
+tests/conftest.py
+tests/fakes/providers.py
+tests/fakes/factories.py
+tests/unit/**
+tests/contract/**
+tests/integration/**
+tests/fixtures/**
 ```
 
 `examples/reference_integrations/**` is intentionally untouched in this plan.
@@ -96,7 +91,7 @@ tests/fakes/
 
 **Interfaces:**
 - Consumes: none.
-- Produces: installable package `bioharness`; `Settings(database_url, run_root, artifact_root, protected_roots)`; remote pytest/PostgreSQL CI used by all later tasks.
+- Produces: installable `bioharness` package; frozen `Settings`; PostgreSQL-backed GitHub Actions CI.
 
 - [ ] **Step 1: Write the package smoke test**
 
@@ -117,7 +112,7 @@ def test_package_import_and_settings(tmp_path):
     assert settings.run_root.name == "runs"
 ```
 
-- [ ] **Step 2: Add the package metadata and dependencies**
+- [ ] **Step 2: Add package metadata**
 
 ```toml
 # pyproject.toml
@@ -188,8 +183,7 @@ jobs:
           POSTGRES_USER: bioharness
           POSTGRES_PASSWORD: bioharness
           POSTGRES_DB: bioharness_test
-        ports:
-          - 5432:5432
+        ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U bioharness -d bioharness_test"
           --health-interval 5s
@@ -207,9 +201,9 @@ jobs:
       - run: python -m pytest -q
 ```
 
-- [ ] **Step 4: Run the smoke test remotely**
+- [ ] **Step 4: Run in CI**
 
-Run in CI: `python -m pytest tests/unit/test_import.py -q`
+Run: `python -m pytest tests/unit/test_import.py -q`
 
 Expected: PASS.
 
@@ -222,7 +216,7 @@ git commit -m "build: bootstrap BioHarness P0 package and CI"
 
 ---
 
-### Task 2: Immutable Scientific Planning Domain
+### Task 2: Immutable Planning Domain
 
 **Files:**
 - Create: `src/bioharness/domain/base.py`
@@ -233,28 +227,25 @@ git commit -m "build: bootstrap BioHarness P0 package and CI"
 - Create: `tests/unit/test_domain_planning.py`
 
 **Interfaces:**
-- Consumes: Pydantic 2.
 - Produces: `FrozenRecord`, `ScientificTaskSpec`, `ResolvedDataRef`, `ScientificAssessment`, `PolicyRequest`, `PolicyDecision`.
 
-- [ ] **Step 1: Write failing tests for immutability and intent/config separation**
+- [ ] **Step 1: Write failing immutability/intent tests**
 
 ```python
-# tests/unit/test_domain_planning.py
 from datetime import datetime, timezone
 from uuid import UUID
 import pytest
 from pydantic import ValidationError
-
 from bioharness.domain.task import OutputIntent, ScientificTaskSpec
 
 NOW = datetime(2026, 9, 18, tzinfo=timezone.utc)
 
 
-def test_task_spec_is_frozen_and_has_no_provider_defaults():
+def test_task_spec_is_frozen_and_excludes_provider_defaults():
     task = ScientificTaskSpec(
         id=UUID("00000000-0000-0000-0000-000000000001"),
         revision=1,
-        question="Build a phylogeny for the requested proteins",
+        question="Build a phylogeny for requested proteins",
         requested_inference="protein phylogeny",
         analysis_class="phylogeny",
         biological_scope={"resources": ["provider://proteome/A"]},
@@ -262,12 +253,12 @@ def test_task_spec_is_frozen_and_has_no_provider_defaults():
         unresolved_fields=(),
         created_at=NOW,
     )
-    assert "min_seqs" not in task.model_fields
+    assert "min_seqs" not in type(task).model_fields
     with pytest.raises(ValidationError):
         task.revision = 2
 ```
 
-- [ ] **Step 2: Implement the immutable base and TaskSpec**
+- [ ] **Step 2: Implement frozen base and TaskSpec**
 
 ```python
 # src/bioharness/domain/base.py
@@ -275,7 +266,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class FrozenRecord(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid", use_enum_values=False)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 ```
 
 ```python
@@ -306,7 +297,7 @@ class ScientificTaskSpec(FrozenRecord):
     created_at: datetime
 ```
 
-- [ ] **Step 3: Add resolved-data and assessment records**
+- [ ] **Step 3: Implement resolved-data and assessment records**
 
 ```python
 # src/bioharness/domain/data.py
@@ -327,7 +318,7 @@ class ResolvedDataRef(FrozenRecord):
     manifest_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     member_manifest_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     biological_identity: dict[str, Any]
-    metadata: dict[str, Any] = {}
+    metadata: dict[str, Any] = Field(default_factory=dict)
     resolved_at: datetime
 ```
 
@@ -361,7 +352,7 @@ class ScientificAssessment(FrozenRecord):
     assessed_at: datetime
 ```
 
-- [ ] **Step 4: Add action-scoped policy records**
+- [ ] **Step 4: Implement action-scoped policy records**
 
 ```python
 # src/bioharness/domain/policy.py
@@ -369,6 +360,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID
+from pydantic import Field
 from .base import FrozenRecord
 
 
@@ -383,7 +375,7 @@ class PolicyRequest(FrozenRecord):
     actor: str
     action: str
     resource: str
-    context: dict[str, Any] = {}
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 class PolicyDecision(FrozenRecord):
@@ -398,13 +390,11 @@ class PolicyDecision(FrozenRecord):
     decided_at: datetime
 ```
 
-- [ ] **Step 5: Run domain tests**
+- [ ] **Step 5: Run and commit**
 
 Run: `python -m pytest tests/unit/test_domain_planning.py -q`
 
 Expected: PASS.
-
-- [ ] **Step 6: Commit**
 
 ```bash
 git add src/bioharness/domain tests/unit/test_domain_planning.py
@@ -413,7 +403,7 @@ git commit -m "feat: define immutable scientific planning records"
 
 ---
 
-### Task 3: Canonical Identity and Hash Projections
+### Task 3: Canonical Identity Projections
 
 **Files:**
 - Create: `src/bioharness/identity/canonical.py`
@@ -421,23 +411,21 @@ git commit -m "feat: define immutable scientific planning records"
 - Create: `tests/unit/test_identity.py`
 
 **Interfaces:**
-- Consumes: JSON-compatible dictionaries.
-- Produces: `canonical_json_bytes(value)`, `sha256_canonical(value)`, `analysis_projection(...)`, `run_spec_projection(...)`.
+- Produces: `canonical_json_bytes`, `sha256_canonical`, `analysis_projection`, `run_spec_projection`.
 
-- [ ] **Step 1: Write deterministic hash tests**
+- [ ] **Step 1: Write hash tests**
 
 ```python
-# tests/unit/test_identity.py
 from bioharness.identity.canonical import sha256_canonical
 from bioharness.identity.projections import analysis_projection, run_spec_projection
 
 
-def test_canonical_hash_ignores_mapping_order():
+def test_mapping_order_does_not_change_hash():
     assert sha256_canonical({"b": 2, "a": 1}) == sha256_canonical({"a": 1, "b": 2})
 
 
 def test_validation_profile_changes_run_spec_not_analysis_identity():
-    base = analysis_projection(
+    analysis = analysis_projection(
         task_semantics={"inference": "phylogeny"},
         input_identities=({"sha256": "a" * 64},),
         workflow_identity={"provider": "fake", "revision": "r1"},
@@ -445,13 +433,13 @@ def test_validation_profile_changes_run_spec_not_analysis_identity():
         environment_contract={"python": "3.12"},
         reproducibility={"class": "SEEDED_STOCHASTIC", "seed": 7},
     )
-    a = run_spec_projection(base, {"profile_id": "candidate", "revision": "1"}, {"project": "p1"})
-    b = run_spec_projection(base, {"profile_id": "candidate", "revision": "2"}, {"project": "p1"})
-    assert sha256_canonical(base) == sha256_canonical(base)
-    assert sha256_canonical(a) != sha256_canonical(b)
+    run_a = run_spec_projection(analysis, {"id": "candidate", "revision": "1"}, {"project": "p1"})
+    run_b = run_spec_projection(analysis, {"id": "candidate", "revision": "2"}, {"project": "p1"})
+    assert sha256_canonical(run_a) != sha256_canonical(run_b)
+    assert sha256_canonical(analysis) == sha256_canonical(analysis)
 ```
 
-- [ ] **Step 2: Implement RFC 8785 hashing**
+- [ ] **Step 2: Implement RFC 8785 canonical hashing**
 
 ```python
 # src/bioharness/identity/canonical.py
@@ -467,7 +455,7 @@ def sha256_canonical(value: object) -> str:
     return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
 ```
 
-- [ ] **Step 3: Implement versioned projections**
+- [ ] **Step 3: Implement explicit versioned projections**
 
 ```python
 # src/bioharness/identity/projections.py
@@ -498,13 +486,11 @@ def run_spec_projection(analysis: dict[str, Any], validation_profile: dict[str, 
     }
 ```
 
-- [ ] **Step 4: Run identity tests**
+- [ ] **Step 4: Run and commit**
 
 Run: `python -m pytest tests/unit/test_identity.py -q`
 
 Expected: PASS.
-
-- [ ] **Step 5: Commit**
 
 ```bash
 git add src/bioharness/identity tests/unit/test_identity.py
@@ -513,41 +499,20 @@ git commit -m "feat: add canonical analysis and run spec identity"
 
 ---
 
-### Task 4: Provider, Executor, and Policy Ports with Deterministic Fakes
+### Task 4: Stable Ports and Shared Test Fakes
 
 **Files:**
 - Create: `src/bioharness/ports/data_provider.py`
 - Create: `src/bioharness/ports/workflow_executor.py`
 - Create: `src/bioharness/ports/policy.py`
 - Create: `tests/fakes/providers.py`
+- Create: `tests/fakes/factories.py`
 - Create: `tests/contract/test_ports.py`
 
 **Interfaces:**
-- Consumes: domain records from Tasks 2-3.
-- Produces: stable public seams `DataProvider`, `WorkflowExecutor`, `PolicyEvaluator`, `ProviderResolution`, `ExecutorCapabilities`, `InvocationSpec`, `ExecutionEvidence`.
+- Produces: `DataProvider`, `WorkflowExecutor`, `ProcessRunner`, `PolicyEvaluator`, `ProviderResource`, `ProviderResolution`, `ExecutorCapabilities`, `InvocationSpec`, `ExecutionBinding`, `ExecutionEvidence`.
 
-- [ ] **Step 1: Write port contract tests using fakes**
-
-```python
-# tests/contract/test_ports.py
-from tests.fakes.providers import FakeDataProvider, FakePolicyEvaluator, FakeWorkflowExecutor
-
-
-def test_fake_executor_declares_capabilities_explicitly():
-    executor = FakeWorkflowExecutor()
-    caps = executor.capabilities()
-    assert caps.native_idempotency_key is False
-    assert caps.durable_external_execution_id is False
-    assert caps.poll is False
-
-
-def test_policy_is_action_scoped():
-    policy = FakePolicyEvaluator(denied_actions={"publish"})
-    assert policy.evaluate("alice", "launch", "runspec:1", {}).outcome.value == "ALLOW"
-    assert policy.evaluate("alice", "publish", "artifact:1", {}).outcome.value == "DENY"
-```
-
-- [ ] **Step 2: Define the DataProvider contract**
+- [ ] **Step 1: Define DataProvider records/protocol**
 
 ```python
 # src/bioharness/ports/data_provider.py
@@ -556,10 +521,18 @@ from pydantic import Field
 from bioharness.domain.base import FrozenRecord
 
 
+class ProviderResource(FrozenRecord):
+    logical_uri: str
+    resource_type: str
+    biological_identity: dict[str, Any]
+    content_identity: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class ProviderResolution(FrozenRecord):
     provider: str
     provider_revision: str
-    resources: tuple[dict[str, Any], ...]
+    resources: tuple[ProviderResource, ...]
     evidence: tuple[dict[str, Any], ...] = ()
 
 
@@ -567,12 +540,13 @@ class DataProvider(Protocol):
     def resolve(self, logical_resources: tuple[str, ...], context: dict[str, Any]) -> ProviderResolution: ...
 ```
 
-- [ ] **Step 3: Define executor capability/evidence contracts**
+- [ ] **Step 2: Define executor/process contracts**
 
 ```python
 # src/bioharness/ports/workflow_executor.py
 from pathlib import Path
 from typing import Any, Protocol
+from pydantic import Field
 from bioharness.domain.base import FrozenRecord
 
 
@@ -600,7 +574,7 @@ class ExecutionBinding(FrozenRecord):
     pid: int | None
     process_start_token: str | None
     external_execution_id: str | None
-    metadata: dict[str, Any] = {}
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ExecutionEvidence(FrozenRecord):
@@ -615,9 +589,13 @@ class WorkflowExecutor(Protocol):
     def prepare(self, run_spec_payload: dict[str, Any], attempt_payload: dict[str, Any]) -> InvocationSpec: ...
     def inspect(self, binding: ExecutionBinding, attempt_payload: dict[str, Any]) -> ExecutionEvidence: ...
     def discover_artifacts(self, attempt_payload: dict[str, Any]) -> tuple[dict[str, Any], ...]: ...
+
+
+class ProcessRunner(Protocol):
+    def spawn(self, invocation: InvocationSpec) -> ExecutionBinding: ...
 ```
 
-- [ ] **Step 4: Define policy port and deterministic fakes**
+- [ ] **Step 3: Define policy port**
 
 ```python
 # src/bioharness/ports/policy.py
@@ -629,24 +607,45 @@ class PolicyEvaluator(Protocol):
     def evaluate(self, actor: str, action: str, resource: str, context: dict[str, Any]) -> PolicyDecision: ...
 ```
 
-`tests/fakes/providers.py` must implement all three ports without importing provider-specific production code. Use fixed revisions (`fake-data@1`, `fake-executor@1`, `test-policy@1`) and UUID4 decisions.
+- [ ] **Step 4: Implement deterministic fakes/factories**
 
-- [ ] **Step 5: Run port tests**
+`tests/fakes/providers.py` defines `FakeDataProvider`, `FakeWorkflowExecutor`, `FakeProcessRunner`, `FakePolicyEvaluator`. Each exposes a `.calls` list. `FakeProcessRunner` exposes `.spawn_calls`. `FakeWorkflowExecutor` exposes `.prepare_calls`. No fake imports Genome-web.
+
+`tests/fakes/factories.py` defines `make_task()`, `make_data_ref()`, `make_run_spec()` using fixed timestamps and UUIDs by default so hash/repository tests are repeatable.
+
+- [ ] **Step 5: Test explicit capabilities and action-scoped policy**
+
+```python
+from tests.fakes.providers import FakePolicyEvaluator, FakeWorkflowExecutor
+
+
+def test_fake_executor_declares_no_unearned_guarantees():
+    caps = FakeWorkflowExecutor().capabilities()
+    assert caps.native_idempotency_key is False
+    assert caps.durable_external_execution_id is False
+    assert caps.poll is False
+
+
+def test_policy_is_action_scoped():
+    policy = FakePolicyEvaluator(denied_actions={"publish"})
+    assert policy.evaluate("alice", "launch", "runspec:1", {}).outcome.value == "ALLOW"
+    assert policy.evaluate("alice", "publish", "artifact:1", {}).outcome.value == "DENY"
+```
+
+- [ ] **Step 6: Run and commit**
 
 Run: `python -m pytest tests/contract/test_ports.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
-
 ```bash
 git add src/bioharness/ports tests/fakes tests/contract/test_ports.py
-git commit -m "feat: define provider executor and policy seams"
+git commit -m "feat: define provider executor process and policy seams"
 ```
 
 ---
 
-### Task 5: Run/Validation/Memory Domain Records
+### Task 5: Run, Artifact, Validation, and Memory Domain
 
 **Files:**
 - Create: `src/bioharness/domain/run.py`
@@ -656,27 +655,23 @@ git commit -m "feat: define provider executor and policy seams"
 - Create: `tests/unit/test_run_domain.py`
 
 **Interfaces:**
-- Consumes: `FrozenRecord` and identity hashes.
-- Produces: `ResolvedConfiguration`, `ContextSnapshot`, `RunSpec`, `RunAttempt`, `RunEvent`, `Artifact`, `ValidationReport/Profile/Evaluation`, `MemoryCandidate`.
+- Produces: immutable run/config/context/evidence records and transition rules.
 
-- [ ] **Step 1: Write run identity/state tests**
+- [ ] **Step 1: Define attempt state transition tests**
 
 ```python
-# tests/unit/test_run_domain.py
 from bioharness.domain.run import RunAttemptState, allowed_transition
 
 
-def test_finished_is_not_validation_state():
+def test_finished_is_execution_not_validation_state():
     assert allowed_transition(RunAttemptState.COLLECTING, RunAttemptState.FINISHED)
 
 
-def test_unknown_does_not_transition_directly_to_submitting():
+def test_unknown_cannot_be_resubmitted_in_place():
     assert not allowed_transition(RunAttemptState.UNKNOWN, RunAttemptState.SUBMITTING)
 ```
 
-- [ ] **Step 2: Implement run records and explicit transition table**
-
-`src/bioharness/domain/run.py` must define:
+- [ ] **Step 2: Implement states and transition map**
 
 ```python
 class RunAttemptState(StrEnum):
@@ -689,51 +684,42 @@ class RunAttemptState(StrEnum):
     NEEDS_OPERATOR_RECONCILIATION = "NEEDS_OPERATOR_RECONCILIATION"
 ```
 
-The allowed transition map is exactly:
-
-```python
-_ALLOWED = {
-    RunAttemptState.SUBMITTING: {RunAttemptState.RUNNING, RunAttemptState.FAILED, RunAttemptState.UNKNOWN},
-    RunAttemptState.RUNNING: {RunAttemptState.COLLECTING, RunAttemptState.FAILED, RunAttemptState.UNKNOWN},
-    RunAttemptState.COLLECTING: {RunAttemptState.FINISHED, RunAttemptState.FAILED, RunAttemptState.UNKNOWN},
-    RunAttemptState.UNKNOWN: {RunAttemptState.RUNNING, RunAttemptState.COLLECTING, RunAttemptState.FINISHED, RunAttemptState.FAILED, RunAttemptState.NEEDS_OPERATOR_RECONCILIATION},
-    RunAttemptState.NEEDS_OPERATOR_RECONCILIATION: {RunAttemptState.RUNNING, RunAttemptState.COLLECTING, RunAttemptState.FINISHED, RunAttemptState.FAILED},
-    RunAttemptState.FINISHED: set(),
-    RunAttemptState.FAILED: set(),
-}
-```
-
-Also define immutable records with the following stable fields:
+Allowed transitions are exactly:
 
 ```text
-ResolvedConfiguration: id, provider, provider_revision, workflow_revision, parameters, environment_contract, validation_profile_id, validation_profile_revision, reproducibility, created_at
-ContextSnapshot: id, task_spec_id, resolved_data_ref_ids, policy_decision_ids, memory_candidate_ids, limitations, created_at
-RunSpec: id, task_spec_id, assessment_id, configuration_id, context_snapshot_id, input_ref_ids, analysis_hash, run_spec_hash, expected_outputs, created_at
-RunAttempt: id, run_spec_id, attempt_number, executor, submission_key, provider_attempt_name, state, binding, submitted_at, last_reconciled_at
-RunEvent: id, run_attempt_id, sequence_no, event_type, payload, recorded_at
+SUBMITTING -> RUNNING | FAILED | UNKNOWN
+RUNNING -> COLLECTING | FAILED | UNKNOWN
+COLLECTING -> FINISHED | FAILED | UNKNOWN
+UNKNOWN -> RUNNING | COLLECTING | FINISHED | FAILED | NEEDS_OPERATOR_RECONCILIATION
+NEEDS_OPERATOR_RECONCILIATION -> RUNNING | COLLECTING | FINISHED | FAILED
+FINISHED -> none
+FAILED -> none
 ```
 
-- [ ] **Step 3: Implement Artifact, Validation, and MemoryCandidate records**
+- [ ] **Step 3: Implement stable run records**
 
-Required stable fields:
+`ResolvedConfiguration`, `ContextSnapshot`, `RunSpec`, `RunAttempt`, and `RunEvent` fields are exactly those in the design spec. `RunAttempt.binding` is `ExecutionBinding | None`. `RunEvent.event_type` is a StrEnum containing the durable event names from the spec.
+
+- [ ] **Step 4: Implement Artifact, Validation, Memory models**
+
+Add:
 
 ```text
-Artifact: id, run_spec_id, run_attempt_id, role, content_sha256, size_bytes, uri, metadata, registered_at
-ValidationReport: id, kind, subject_type, subject_id, validator, validator_revision, outcome, limitations, evidence_refs, created_at
-ValidationProfile: profile_id, revision, requirements
-ValidationEvaluation: id, profile_id, profile_revision, report_ids, outcome, evaluated_at
-MemoryCandidate: id, scope, kind, statement, tags, applicability, evidence_refs, status, created_at
+Artifact(id, run_spec_id, run_attempt_id, role, content_sha256, size_bytes, uri, metadata, registered_at)
+ValidationReport(id, kind, subject_type, subject_id, validator, validator_revision, outcome, limitations, evidence_refs, created_at)
+ValidationRequirement(kind, allowed_outcomes)
+ValidationProfile(profile_id, revision, requirements)
+ValidationEvaluation(id, profile_id, profile_revision, report_ids, outcome, evaluated_at)
+MemoryCandidate(id, scope, kind, statement, tags, applicability, evidence_refs, status, created_at)
 ```
 
-`ValidationKind` must include `provider_contract`, `artifact_integrity`, `provenance_completeness`, `method_qc`, `scientific_assumptions`, `reproducibility`, `publication_readiness`.
+`MemoryCandidate.evidence_refs` must have `min_length=1`.
 
-- [ ] **Step 4: Run domain tests**
+- [ ] **Step 5: Run and commit**
 
 Run: `python -m pytest tests/unit/test_run_domain.py -q`
 
 Expected: PASS.
-
-- [ ] **Step 5: Commit**
 
 ```bash
 git add src/bioharness/domain tests/unit/test_run_domain.py
@@ -742,7 +728,7 @@ git commit -m "feat: define run evidence validation and memory records"
 
 ---
 
-### Task 6: PostgreSQL Schema, Migration, and Repository Boundaries
+### Task 6: PostgreSQL Schema, Migration, UoW, and Shared DB Fixtures
 
 **Files:**
 - Create: `src/bioharness/adapters/postgres/base.py`
@@ -753,59 +739,51 @@ git commit -m "feat: define run evidence validation and memory records"
 - Create: `alembic.ini`
 - Create: `migrations/env.py`
 - Create: `migrations/versions/0001_p0_kernel.py`
+- Create: `tests/conftest.py`
 - Create: `tests/integration/test_postgres_schema.py`
 
 **Interfaces:**
-- Consumes: all immutable domain records.
-- Produces: transactional `PostgresUnitOfWork`, repositories for planning, run state/events, artifacts, validation, memory.
+- Produces: `PostgresUnitOfWork(database_url)`, planning/run/artifact/validation/memory repositories, migrated DB fixture.
 
-- [ ] **Step 1: Write schema constraint tests**
+- [ ] **Step 1: Define `tests/conftest.py` DB fixture**
 
 ```python
-# tests/integration/test_postgres_schema.py
 import os
+import subprocess
 import pytest
-from sqlalchemy.exc import IntegrityError
-from bioharness.adapters.postgres.session import create_engine_from_url
-from bioharness.adapters.postgres.repositories import PostgresUnitOfWork
-
-DB_URL = os.environ["BIOHARNESS_TEST_DATABASE_URL"]
 
 
-def test_submission_key_is_unique(migrated_database, sample_run_spec):
-    with PostgresUnitOfWork(DB_URL) as uow:
-        first = uow.runs.create_attempt_intent(sample_run_spec.id, "alice", "sub-1", "attempt-1")
-        uow.commit()
-    with pytest.raises(IntegrityError):
-        with PostgresUnitOfWork(DB_URL) as uow:
-            uow.runs.create_attempt_intent(sample_run_spec.id, "alice", "sub-1", "attempt-2")
-            uow.commit()
+@pytest.fixture(scope="session")
+def database_url() -> str:
+    return os.environ["BIOHARNESS_TEST_DATABASE_URL"]
+
+
+@pytest.fixture
+def migrated_database(database_url: str):
+    subprocess.run(["alembic", "downgrade", "base"], check=True)
+    subprocess.run(["alembic", "upgrade", "head"], check=True)
+    yield database_url
 ```
 
-- [ ] **Step 2: Define SQLAlchemy base and session factory**
+No test uses SQLite as a substitute for concurrency/locking semantics.
 
-Use SQLAlchemy 2 declarative mappings, PostgreSQL UUID, JSONB, timezone-aware `DateTime`, and explicit named unique constraints.
+- [ ] **Step 2: Create SQLAlchemy base/session factory and all P0 tables**
 
-- [ ] **Step 3: Implement exactly these minimum relational constraints**
+Use PostgreSQL UUID, JSONB, timezone-aware timestamps. Immutable records store validated snapshot JSONB plus query-critical columns. `run_attempts` owns mutable current state; `run_events` is append-only.
+
+- [ ] **Step 3: Enforce minimum DB constraints**
 
 ```text
-run_specs.run_spec_hash                         UNIQUE
-run_attempts(run_spec_id, attempt_number)      UNIQUE
-run_attempts.submission_key                    UNIQUE
+run_specs.run_spec_hash UNIQUE
+run_attempts(run_spec_id, attempt_number) UNIQUE
+run_attempts.submission_key UNIQUE
 run_attempts(executor_namespace, provider_attempt_name) UNIQUE
-run_events(run_attempt_id, sequence_no)        UNIQUE
-validation_profiles(profile_id, revision)      UNIQUE
+run_events(run_attempt_id, sequence_no) UNIQUE
+validation_profiles(profile_id, revision) UNIQUE
+analysis_hash INDEX, not UNIQUE
 ```
 
-`analysis_hash` receives a normal index, not a unique constraint.
-
-- [ ] **Step 4: Create the first migration**
-
-`migrations/versions/0001_p0_kernel.py` must create all P0 tables named in the spec: projects, scientific_task_specs, policy_decisions, resolved_data_refs, scientific_assessments, resolved_configurations, context_snapshots, run_specs, run_attempts, run_events, artifacts, validation_profiles, validation_reports, validation_evaluations, memory_candidates.
-
-Immutable records store a validated JSONB snapshot plus query-critical columns. `run_attempts` stores mutable current state; `run_events` stores immutable transition history.
-
-- [ ] **Step 5: Implement `PostgresUnitOfWork`**
+- [ ] **Step 4: Implement repository/UoW interfaces**
 
 ```python
 # src/bioharness/ports/repositories.py
@@ -813,13 +791,22 @@ from typing import Protocol
 
 
 class UnitOfWork(Protocol):
+    planning: object
+    runs: object
+    artifacts: object
+    validation: object
+    memory: object
     def commit(self) -> None: ...
     def rollback(self) -> None: ...
 ```
 
-`PostgresUnitOfWork` must expose `.planning`, `.runs`, `.artifacts`, `.validation`, `.memory`, and own one SQLAlchemy Session. Repository methods for immutable record types are `add`/`get`; do not expose generic `update`/`delete`.
+`PostgresUnitOfWork` owns one Session and exposes only `add/get/list` for immutable records. RunAttempt state updates occur only through run-specific transition methods that append a RunEvent in the same transaction.
 
-- [ ] **Step 6: Run migration and repository tests in CI**
+- [ ] **Step 5: Test unique constraints directly**
+
+Create one RunSpec using `tests.fakes.factories.make_run_spec()`, persist it, then attempt duplicate `run_spec_hash`; expect `IntegrityError`. Create one attempt, then duplicate `submission_key`; expect `IntegrityError`.
+
+- [ ] **Step 6: Run and commit**
 
 Run:
 
@@ -830,16 +817,14 @@ python -m pytest tests/integration/test_postgres_schema.py -q
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
-
 ```bash
-git add alembic.ini migrations src/bioharness/adapters/postgres src/bioharness/ports/repositories.py tests/integration/test_postgres_schema.py
+git add alembic.ini migrations src/bioharness/adapters/postgres src/bioharness/ports/repositories.py tests/conftest.py tests/integration/test_postgres_schema.py
 git commit -m "feat: add authoritative PostgreSQL persistence"
 ```
 
 ---
 
-### Task 7: Authorized Resolution and Deterministic Planning Service
+### Task 7: Authorized Resolution and Deterministic Planning
 
 **Files:**
 - Create: `src/bioharness/application/resolve_task.py`
@@ -847,52 +832,36 @@ git commit -m "feat: add authoritative PostgreSQL persistence"
 - Create: `tests/contract/test_planning_service.py`
 
 **Interfaces:**
-- Consumes: `ScientificTaskSpec`, `DataProvider`, `PolicyEvaluator`, repositories, identity projections.
-- Produces: immutable `ResolvedDataRef`, `ScientificAssessment`, `ResolvedConfiguration`, `ContextSnapshot`, `RunSpec`.
+- Produces:
+  - `ResolutionService.resolve(task_id: UUID, actor: str) -> tuple[ResolvedDataRef, ...]`
+  - `PlanningService.publish_run_spec(...) -> RunSpec`
 
-- [ ] **Step 1: Write AUTH-02 and TF-03/PLAN-01 tests**
+- [ ] **Step 1: Write AUTH-02 order test without undefined fixtures**
 
-```python
-# tests/contract/test_planning_service.py
-def test_resolution_authorizes_before_provider_read(planning_service, spying_provider, policy):
-    planning_service.resolve(task_id=TASK_ID, actor="alice")
-    assert policy.calls[0].action == "read_resolve"
-    assert spying_provider.first_call_index > policy.first_call_index
+Construct `FakePolicyEvaluator`, `FakeDataProvider`, and an in-memory spy repository in the test. The fake policy and provider each append `("policy", action)` / `("provider", "resolve")` into the same `order` list. Assert policy `read_resolve` appears before provider `resolve`.
 
-
-def test_task_intent_does_not_receive_provider_defaults(sample_task):
-    assert "min_seqs" not in sample_task.model_dump()
-
-
-def test_assessment_fingerprint_binds_task_data_and_contract(planned_run):
-    assert len(planned_run.assessment.dependency_fingerprint) == 64
-    assert planned_run.assessment.resolved_data_ref_ids == planned_run.run_spec.input_ref_ids
-```
-
-- [ ] **Step 2: Implement `ResolutionService`**
+- [ ] **Step 2: Implement `ResolutionService.resolve`**
 
 Algorithm:
 
 ```text
 load TaskSpec
--> PolicyEvaluator.evaluate(actor, "read_resolve", task resource, current context)
--> DENY/REQUIRE_APPROVAL: stop before DataProvider.resolve
+-> current PolicyEvaluator.evaluate(actor, "read_resolve", task resource, context)
+-> if DENY/REQUIRE_APPROVAL: stop before DataProvider.resolve
 -> DataProvider.resolve
--> convert provider-neutral resources to ResolvedDataRef records
--> persist PolicyDecision + ResolvedDataRefs
+-> convert ProviderResource records to ResolvedDataRef records
+-> persist current PolicyDecision and ResolvedDataRefs
 ```
 
-No provider defaults are written to TaskSpec.
+The conversion copies provider/resource identity; BioHarness never invents missing biological identifiers.
 
-- [ ] **Step 3: Implement deterministic assessment fingerprint**
-
-The dependency fingerprint is:
+- [ ] **Step 3: Implement assessment dependency fingerprint**
 
 ```python
 sha256_canonical({
     "projection_version": "bioharness.assessment-deps.v1",
     "task_spec": {"id": str(task.id), "revision": task.revision},
-    "resolved_data_refs": [str(x.id) for x in sorted(refs, key=lambda r: str(r.id))],
+    "resolved_data_refs": [str(ref.id) for ref in sorted(refs, key=lambda x: str(x.id))],
     "scientific_contract": {"id": contract_id, "revision": contract_revision},
     "assumption_constraints": assumption_constraints,
 })
@@ -900,15 +869,17 @@ sha256_canonical({
 
 - [ ] **Step 4: Implement `PlanningService.publish_run_spec`**
 
-Inputs must include explicit configuration defaults and environment contract. The service computes `analysis_hash`, creates ContextSnapshot, computes `run_spec_hash`, persists all immutable records, and refuses publication when assessment status is `UNRESOLVED`, `NOT_IDENTIFIABLE`, or `INCOMPATIBLE`.
+Inputs include explicit provider/workflow identity, result-affecting parameters, environment contract, reproducibility contract, validation profile ref, expected outputs, and current assessment. Refuse publication for `UNRESOLVED`, `NOT_IDENTIFIABLE`, or `INCOMPATIBLE`. Compute `analysis_hash` and `run_spec_hash` from Task 3 functions, then persist ResolvedConfiguration, ContextSnapshot, and RunSpec.
 
-- [ ] **Step 5: Run planning contract tests**
+- [ ] **Step 5: Test assumption-relevant change invalidation**
+
+Create assessment dependency fingerprint for constraint `{"model": "A"}`. Attempt to publish configuration with `{"model": "B"}` marked assumption-relevant. Assert `AssessmentDependencyMismatch` and no RunSpec row.
+
+- [ ] **Step 6: Run and commit**
 
 Run: `python -m pytest tests/contract/test_planning_service.py -q`
 
 Expected: PASS.
-
-- [ ] **Step 6: Commit**
 
 ```bash
 git add src/bioharness/application/resolve_task.py src/bioharness/application/plan_analysis.py tests/contract/test_planning_service.py
@@ -917,7 +888,7 @@ git commit -m "feat: add authorized deterministic planning flow"
 
 ---
 
-### Task 8: RunAttempt Allocation and Intent-Before-Side-Effect Transaction
+### Task 8: RunAttempt Allocation and Intent-Before-Side-Effect
 
 **Files:**
 - Modify: `src/bioharness/adapters/postgres/repositories.py`
@@ -926,44 +897,48 @@ git commit -m "feat: add authorized deterministic planning flow"
 - Create: `tests/contract/test_execution_intent.py`
 
 **Interfaces:**
-- Consumes: executable RunSpec, current `PolicyEvaluator`, `WorkflowExecutor`.
-- Produces: atomic `RunAttempt(SUBMITTING)` + PolicyDecision + ordered RunEvents before executor submission.
+- `ExecutionService(policy, executor, process_runner, uow_factory)`
+- `ExecutionService.start(run_spec_id: UUID, actor: str) -> RunAttempt`
 
 - [ ] **Step 1: Write concurrent allocation test**
 
-Use two independent PostgreSQL sessions and a barrier. Both call `create_attempt_intent` for the same RunSpec. Assert returned attempt numbers are `{1, 2}` and there is no duplicate `(run_spec_id, attempt_number)`.
+Use `ThreadPoolExecutor(max_workers=2)` with two independent PostgreSQL UoWs targeting the same RunSpec. Both call `runs.allocate_attempt_intent(...)`. Assert attempt numbers are exactly `{1, 2}`.
 
-- [ ] **Step 2: Implement attempt allocation under row lock**
+- [ ] **Step 2: Implement allocation under `SELECT ... FOR UPDATE`**
 
-`RunRepository.create_attempt_intent(...)` must:
+Within one transaction:
 
 ```text
-SELECT run_specs ... FOR UPDATE
-SELECT COALESCE(MAX(attempt_number), 0) for run_spec_id
-next = max + 1
-INSERT RunAttempt state=SUBMITTING
-INSERT AttemptCreated seq=1
-INSERT AuthorizationChecked seq=2
-INSERT SubmissionIntentRecorded seq=3
+lock RunSpec row
+allocate next attempt_number
+persist current launch PolicyDecision
+insert RunAttempt state=SUBMITTING
+append AttemptCreated seq=1
+append AuthorizationChecked seq=2
+append SubmissionIntentRecorded seq=3
+commit
 ```
 
-The three event inserts and attempt insert occur in one transaction.
+No file hash or process call occurs inside this transaction.
 
-- [ ] **Step 3: Write AUTH-01 launch test**
+- [ ] **Step 3: Write AUTH-01 launch test with explicit fakes**
 
 ```python
-def test_historical_allow_does_not_authorize_new_launch(execution_service, policy):
-    policy.set_outcome("launch", "DENY")
-    with pytest.raises(LaunchDenied):
-        execution_service.start(RUN_SPEC_ID, actor="alice")
-    assert execution_service.executor.submit_calls == 0
+policy = FakePolicyEvaluator(denied_actions={"launch"})
+executor = FakeWorkflowExecutor()
+runner = FakeProcessRunner()
+service = ExecutionService(policy=policy, executor=executor, process_runner=runner, uow_factory=uow_factory)
+with pytest.raises(LaunchDenied):
+    service.start(run_spec.id, actor="alice")
+assert executor.prepare_calls == 0
+assert runner.spawn_calls == 0
 ```
 
-- [ ] **Step 4: Implement `ExecutionService.start` phase A**
+- [ ] **Step 4: Implement phase-0 preflight and fresh launch authorization**
 
-The service must perform fresh preflight before opening the short transaction, then persist a new current launch PolicyDecision. A historical decision in ContextSnapshot is never reused as authority.
+Before the allocation transaction, recheck frozen input identities/environment identity and protected roots. Then evaluate fresh current launch policy; never reuse ContextSnapshot authorization.
 
-- [ ] **Step 5: Run allocation/intent tests**
+- [ ] **Step 5: Run and commit**
 
 Run:
 
@@ -973,8 +948,6 @@ python -m pytest tests/integration/test_attempt_allocation.py tests/contract/tes
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
-
 ```bash
 git add src/bioharness/application/execute_run.py src/bioharness/adapters/postgres/repositories.py tests/integration/test_attempt_allocation.py tests/contract/test_execution_intent.py
 git commit -m "feat: persist launch intent before external execution"
@@ -982,7 +955,7 @@ git commit -m "feat: persist launch intent before external execution"
 
 ---
 
-### Task 9: Generic Local-Process Primitive and Safe Launch Binding
+### Task 9: Generic Local Process Runner and Ambiguous-Bind Handling
 
 **Files:**
 - Create: `src/bioharness/adapters/local_process/runner.py`
@@ -992,16 +965,14 @@ git commit -m "feat: persist launch intent before external execution"
 - Create: `tests/contract/test_unknown_submission.py`
 
 **Interfaces:**
-- Consumes: `InvocationSpec` from a WorkflowExecutor and a committed SUBMITTING RunAttempt.
-- Produces: `ExecutionBinding`; RUNNING or UNKNOWN transition + durable event.
+- `LocalProcessRunner.spawn(InvocationSpec) -> ExecutionBinding`
+- `LocalProcessProbe.probe(ExecutionBinding) -> bool | None`
 
-- [ ] **Step 1: Write local process binding test**
+- [ ] **Step 1: Write local-process binding test**
 
-Use `sys.executable -c 'import time; time.sleep(2)'` as the process. Assert `LocalProcessRunner.spawn()` returns PID, hostname, and a Linux `/proc/<pid>/stat` start token when available.
+Use `sys.executable -c 'import time; time.sleep(2)'`. Assert returned binding has hostname/PID and a `/proc/<pid>/stat` start token on Linux.
 
-- [ ] **Step 2: Implement `LocalProcessRunner.spawn`**
-
-Use:
+- [ ] **Step 2: Implement runner**
 
 ```python
 subprocess.Popen(
@@ -1014,17 +985,26 @@ subprocess.Popen(
 )
 ```
 
-Never use `shell=True`. Create stdout/stderr parent directories before spawn. Record `socket.gethostname()` and `/proc/<pid>/stat` field 22 as `process_start_token` on Linux.
+Never use `shell=True`. Create output parents before spawn. Read Linux `/proc/<pid>/stat` field 22 for the start token; if `/proc` is unavailable, set it to `None` and reconciliation becomes weaker rather than inventing identity.
 
-- [ ] **Step 3: Write the ambiguous bind test**
+- [ ] **Step 3: Complete `ExecutionService.start` phase B**
 
-Inject a runner that raises `BindingUncertain` after the submission intent transaction. Assert the same RunAttempt becomes `UNKNOWN`, `ExecutionOutcomeUnknown` is appended, and `WorkflowExecutor.prepare` is not called a second time automatically.
+After committed submission intent:
 
-- [ ] **Step 4: Complete `ExecutionService.start` phase B/C**
+```text
+executor.prepare(...)
+-> process_runner.spawn(invocation)
+-> atomically persist binding + RUNNING
+-> append ExternalProcessBound + ExecutionStarted
+```
 
-On successful bind, atomically update state to RUNNING and append `ExternalProcessBound` + `ExecutionStarted`. On known spawn failure before process creation, mark FAILED. On ambiguous post-spawn/bind failure, mark UNKNOWN. Do not create another RunAttempt automatically.
+Known failure before process creation -> FAILED. Ambiguity after possible process creation/bind -> UNKNOWN + `ExecutionOutcomeUnknown`. Never auto-create a second attempt.
 
-- [ ] **Step 5: Run process/unknown tests**
+- [ ] **Step 4: Write ambiguous bind test**
+
+Use `FakeProcessRunner(raise_after_possible_spawn=True)`. Assert one RunAttempt remains UNKNOWN, one runner call occurred, and executor.prepare was called once.
+
+- [ ] **Step 5: Run and commit**
 
 Run:
 
@@ -1034,8 +1014,6 @@ python -m pytest tests/unit/test_local_process.py tests/contract/test_unknown_su
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
-
 ```bash
 git add src/bioharness/adapters/local_process src/bioharness/application/execute_run.py tests/unit/test_local_process.py tests/contract/test_unknown_submission.py
 git commit -m "feat: add crash-aware local process execution"
@@ -1043,48 +1021,44 @@ git commit -m "feat: add crash-aware local process execution"
 
 ---
 
-### Task 10: Evidence-Based Reconciliation
+### Task 10: Conservative Reconciliation
 
 **Files:**
 - Create: `src/bioharness/application/reconcile_run.py`
+- Modify: `src/bioharness/application/execute_run.py`
 - Modify: `src/bioharness/adapters/local_process/probe.py`
 - Create: `tests/contract/test_reconciliation.py`
 
 **Interfaces:**
-- Consumes: RunAttempt binding/history and `WorkflowExecutor.inspect` evidence.
-- Produces: safe state transition or `NEEDS_OPERATOR_RECONCILIATION`; never blind resubmission.
+- `ReconciliationService.reconcile(attempt_id: UUID, actor: str) -> RunAttempt`
 
-- [ ] **Step 1: Write reconciliation matrix tests**
-
-Cover exactly:
+- [ ] **Step 1: Test reconciliation matrix**
 
 ```text
-active=True, matching process identity     -> RUNNING
-terminal_outcome="succeeded", exit=0      -> COLLECTING
-terminal_outcome="failed", exit!=0        -> FAILED
-active=None, terminal=None                 -> NEEDS_OPERATOR_RECONCILIATION
-PID exists but process_start_token differs -> NEEDS_OPERATOR_RECONCILIATION
+active=True with matching identity -> RUNNING
+terminal_outcome=succeeded exit=0 -> COLLECTING
+terminal_outcome=failed exit!=0 -> FAILED
+no conclusive evidence -> NEEDS_OPERATOR_RECONCILIATION
+PID exists but start token mismatches -> NEEDS_OPERATOR_RECONCILIATION
 ```
 
-- [ ] **Step 2: Implement `LocalProcessProbe`**
+- [ ] **Step 2: Implement process identity probe**
 
-`probe(binding)` checks `/proc/<pid>/stat` when available. PID existence without matching recorded start token returns indeterminate, not active.
+PID existence without a matching recorded start token is not proof of the same process. Return indeterminate (`None`) on mismatch/unverifiable identity.
 
-- [ ] **Step 3: Implement `ReconciliationService.reconcile`**
+- [ ] **Step 3: Implement reconciliation service**
 
-It loads the attempt and ordered events, asks the executor for provider evidence, combines provider/process evidence conservatively, and writes a state transition plus `ReconciliationResolved` or `ReconciliationRequired` in one transaction.
+Combine RunAttempt history, process probe, and `WorkflowExecutor.inspect`. Transition state and append `ReconciliationResolved` or `ReconciliationRequired` in the same DB transaction.
 
-- [ ] **Step 4: Explicitly block new launch when unresolved attempt exists**
+- [ ] **Step 4: Block start while unresolved attempt exists**
 
-Modify `ExecutionService.start` so a RunSpec with an existing attempt in `UNKNOWN` or `NEEDS_OPERATOR_RECONCILIATION` is rejected with `PriorAttemptUnresolved` until an operator-supported reconciliation resolves it.
+`ExecutionService.start` must raise `PriorAttemptUnresolved` when any attempt for the RunSpec is `UNKNOWN` or `NEEDS_OPERATOR_RECONCILIATION`.
 
-- [ ] **Step 5: Run reconciliation tests**
+- [ ] **Step 5: Run and commit**
 
 Run: `python -m pytest tests/contract/test_reconciliation.py -q`
 
 Expected: PASS.
-
-- [ ] **Step 6: Commit**
 
 ```bash
 git add src/bioharness/application/reconcile_run.py src/bioharness/application/execute_run.py src/bioharness/adapters/local_process/probe.py tests/contract/test_reconciliation.py
@@ -1093,7 +1067,7 @@ git commit -m "feat: add conservative run reconciliation"
 
 ---
 
-### Task 11: Immutable Artifact Registration and Collection
+### Task 11: Immutable Artifact Collection
 
 **Files:**
 - Create: `src/bioharness/adapters/filesystem/artifacts.py`
@@ -1102,13 +1076,13 @@ git commit -m "feat: add conservative run reconciliation"
 - Create: `tests/contract/test_artifact_collection.py`
 
 **Interfaces:**
-- Consumes: adapter-declared artifact candidates and completed attempt evidence.
-- Produces: immutable Artifact rows with digest/size/path; COLLECTING -> FINISHED only after collection completes.
+- `inspect_artifact(path: Path, role: str) -> ArtifactInspection`
+- `ArtifactCollectionService.collect(attempt_id: UUID) -> tuple[Artifact, ...]`
 
-- [ ] **Step 1: Write digest registration test**
+- [ ] **Step 1: Write SHA-256 test**
 
 ```python
-def test_register_artifact_hashes_bytes(tmp_path):
+def test_inspect_artifact_hashes_bytes(tmp_path):
     p = tmp_path / "result.txt"
     p.write_text("abc", encoding="utf-8")
     record = inspect_artifact(p, role="result")
@@ -1116,17 +1090,15 @@ def test_register_artifact_hashes_bytes(tmp_path):
     assert record.size_bytes == 3
 ```
 
-- [ ] **Step 2: Implement streaming SHA-256**
+- [ ] **Step 2: Implement 1 MiB streaming digest**
 
-Read files in fixed 1 MiB chunks; do not load large scientific outputs fully into memory.
+Reject artifact candidates outside configured allowed run/artifact roots. Do not load large scientific files fully into memory.
 
 - [ ] **Step 3: Implement collection service**
 
-`ArtifactCollectionService.collect(attempt_id)` asks `WorkflowExecutor.discover_artifacts`, validates each candidate path is under allowed configured roots, hashes/registers each immutable Artifact, appends `ArtifactDiscovered`/`ArtifactRegistered`, then transitions COLLECTING -> FINISHED.
+Ask `WorkflowExecutor.discover_artifacts`, register each immutable artifact with digest, append `ArtifactDiscovered` and `ArtifactRegistered`, then transition COLLECTING -> FINISHED. Execution FINISHED remains independent from validation.
 
-A missing/changed required artifact causes FAILED collection or a failed later validation according to the adapter-declared requirement; never silently relabel an old artifact.
-
-- [ ] **Step 4: Run artifact tests**
+- [ ] **Step 4: Run and commit**
 
 Run:
 
@@ -1136,8 +1108,6 @@ python -m pytest tests/unit/test_artifact_store.py tests/contract/test_artifact_
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
-
 ```bash
 git add src/bioharness/adapters/filesystem src/bioharness/application/collect_artifacts.py tests/unit/test_artifact_store.py tests/contract/test_artifact_collection.py
 git commit -m "feat: register immutable artifact evidence"
@@ -1145,7 +1115,7 @@ git commit -m "feat: register immutable artifact evidence"
 
 ---
 
-### Task 12: Typed Validation Profiles and Historical Evaluations
+### Task 12: Typed, Versioned Validation
 
 **Files:**
 - Create: `src/bioharness/application/validate_run.py`
@@ -1153,47 +1123,36 @@ git commit -m "feat: register immutable artifact evidence"
 - Create: `tests/contract/test_validation.py`
 
 **Interfaces:**
-- Consumes: immutable subjects/evidence and a versioned ValidationProfile.
-- Produces: typed ValidationReports and immutable ValidationEvaluation.
+- `ValidationService.report(...) -> ValidationReport`
+- `ValidationService.evaluate(profile_id: str, revision: str, report_ids: tuple[UUID, ...]) -> ValidationEvaluation`
 
-- [ ] **Step 1: Write VAL-01/VAL-02/VAL-05 tests**
+- [ ] **Step 1: Define generic `candidate@1` profile in test setup**
 
-```python
-def test_provider_pass_does_not_open_profile_when_provenance_missing(validation_service):
-    provider = validation_service.report(kind="provider_contract", outcome="PASS")
-    evaluation = validation_service.evaluate("candidate", "1", report_ids=(provider.id,))
-    assert evaluation.outcome == "FAIL"
-
-
-def test_candidate_profile_never_publishes(validation_service):
-    evaluation = validation_service.evaluate_complete_candidate()
-    assert evaluation.outcome == "PASS"
-    assert validation_service.canonical_mutations == 0
-```
-
-- [ ] **Step 2: Implement profile requirements**
-
-For the generic P0 `candidate@1` test profile, require:
+Requirements:
 
 ```text
-provider_contract: PASS or PASS_WITH_LIMITATIONS
+provider_contract: PASS | PASS_WITH_LIMITATIONS
 artifact_integrity: PASS
 provenance_completeness: PASS
 ```
 
-Store the exact report IDs used. `PASS_WITH_LIMITATIONS` remains distinct in reports even when a profile permits it.
+- [ ] **Step 2: Write VAL-01/VAL-02 tests using an explicit service/repository**
 
-- [ ] **Step 3: Ensure historical profile revisions are immutable**
+Create only a `provider_contract=PASS` report and evaluate `candidate@1`; assert evaluation FAIL because required artifact/provenance reports are absent. Then add all required PASS reports; assert evaluation PASS.
 
-Creating `candidate@2` must not modify `candidate@1` or prior evaluations. Add an integration assertion against PostgreSQL rows.
+- [ ] **Step 3: Implement validation evaluation**
 
-- [ ] **Step 4: Run validation tests**
+Each report has one kind. Evaluation stores exact profile revision and report IDs. `PASS_WITH_LIMITATIONS` remains attached to the report and is only accepted when that profile requirement allows it.
+
+- [ ] **Step 4: Test historical revision immutability and no publication**
+
+Create `candidate@2` with an extra requirement. Assert prior `candidate@1` row/evaluation is unchanged. ValidationService has no method that writes CanonicalPointer or production publication in P0.
+
+- [ ] **Step 5: Run and commit**
 
 Run: `python -m pytest tests/contract/test_validation.py -q`
 
 Expected: PASS.
-
-- [ ] **Step 5: Commit**
 
 ```bash
 git add src/bioharness/application/validate_run.py src/bioharness/adapters/postgres/repositories.py tests/contract/test_validation.py
@@ -1202,48 +1161,29 @@ git commit -m "feat: add typed versioned validation gates"
 
 ---
 
-### Task 13: Evidence-Backed MemoryCandidate Without Authority Escalation
+### Task 13: Evidence-Backed MemoryCandidate
 
 **Files:**
 - Create: `src/bioharness/application/memory.py`
 - Create: `tests/contract/test_memory.py`
 
 **Interfaces:**
-- Consumes: evidence refs from RunSpec/RunAttempt/Artifact/Validation.
-- Produces: queryable `MemoryCandidate`; never Policy/Finding/Canonical state.
+- `MemoryService.record(...) -> MemoryCandidate`
+- `MemoryService.search(scope: str, tags: tuple[str, ...], text: str | None = None) -> tuple[MemoryCandidate, ...]`
 
-- [ ] **Step 1: Write PROM-04 retrieval test**
+- [ ] **Step 1: Test required evidence and non-authority**
 
-```python
-def test_memory_candidate_can_be_recalled_but_not_authorize(memory_service):
-    candidate = memory_service.record(
-        scope="project:p1",
-        kind="execution_lesson",
-        statement="Executor revision r1 cannot reconcile after disconnect",
-        tags=("executor:r1", "reconciliation"),
-        applicability={"executor_revision": "r1"},
-        evidence_refs=("run_attempt:ra-1", "validation:val-1"),
-    )
-    recalled = memory_service.search(scope="project:p1", tags=("executor:r1",))
-    assert candidate.id in {x.id for x in recalled}
-    assert memory_service.policy_decision_count() == 0
-```
+Attempt record with empty evidence refs; expect validation failure. Record a candidate with evidence refs, retrieve by exact scope/tag, and assert no PolicyDecision/Finding/Canonical record is created.
 
-- [ ] **Step 2: Implement deterministic P0 retrieval**
+- [ ] **Step 2: Implement deterministic retrieval**
 
-Search by scope, exact tags, provider/workflow revision keys, and case-insensitive text containment. No vector store and no graph database.
+Filter by scope, all requested exact tags, provider/workflow applicability keys when present, and optional case-insensitive text containment. No vector/graph storage.
 
-- [ ] **Step 3: Enforce evidence requirement**
-
-Reject creation of a MemoryCandidate with an empty `evidence_refs` tuple in P0.
-
-- [ ] **Step 4: Run memory tests**
+- [ ] **Step 3: Run and commit**
 
 Run: `python -m pytest tests/contract/test_memory.py -q`
 
 Expected: PASS.
-
-- [ ] **Step 5: Commit**
 
 ```bash
 git add src/bioharness/application/memory.py tests/contract/test_memory.py
@@ -1252,30 +1192,30 @@ git commit -m "feat: add evidence-backed memory candidates"
 
 ---
 
-### Task 14: Headless CLI Over Application Services
+### Task 14: Headless CLI and Core Dependency Guard
 
 **Files:**
 - Create: `src/bioharness/cli/__init__.py`
 - Create: `src/bioharness/cli/main.py`
 - Create: `tests/contract/test_cli.py`
+- Create: `tests/contract/test_core_dependency_boundary.py`
 
 **Interfaces:**
-- Consumes: application services only.
-- Produces: stable CLI commands and machine-readable IDs/statuses; no direct provider subprocess calls.
+- CLI commands: `task create`, `task show`, `plan`, `run start`, `run show`, `run reconcile`, `artifact list`, `validate`, `memory list`.
 
-- [ ] **Step 1: Write CLI help/architecture test**
+- [ ] **Step 1: Write Typer command-surface test**
 
-Use Typer `CliRunner`. Assert commands exist: `task create`, `task show`, `plan`, `run start`, `run show`, `run reconcile`, `artifact list`, `validate`, `memory list`.
+Use `typer.testing.CliRunner`, invoke `--help` for root and command groups, and assert exit code 0 plus the expected commands.
 
-- [ ] **Step 2: Implement command groups**
+- [ ] **Step 2: Implement thin CLI**
 
-Each command constructs application services from settings/UoW/registered adapters and prints JSON to stdout for stable IDs/status. Human-friendly formatting can be added later; the P0 source of truth is machine-readable output.
+CLI builds Settings/UoW/application services and delegates. It prints JSON containing stable IDs/status. It never imports provider-specific examples or invokes subprocesses directly.
 
-- [ ] **Step 3: Add a static architecture guard**
+- [ ] **Step 3: Add architecture dependency guard**
 
-`tests/contract/test_core_dependency_boundary.py` scans Python files under `src/bioharness` and fails if imports/text include `examples.reference_integrations`, `genome_web`, `deepseek_harness`, or `earendil_works.pi` as executable dependencies. Documentation strings describing boundaries may be exempted only by keeping them outside executable source.
+Scan `src/bioharness/**/*.py`; fail when executable source contains imports/references to `examples.reference_integrations`, `genome_web`, `deepseek_harness`, or Pi package names. This is a dependency-direction guard, not a ban on architecture documentation outside `src`.
 
-- [ ] **Step 4: Run CLI and boundary tests**
+- [ ] **Step 4: Run and commit**
 
 Run:
 
@@ -1284,8 +1224,6 @@ python -m pytest tests/contract/test_cli.py tests/contract/test_core_dependency_
 ```
 
 Expected: PASS.
-
-- [ ] **Step 5: Commit**
 
 ```bash
 git add src/bioharness/cli tests/contract/test_cli.py tests/contract/test_core_dependency_boundary.py
@@ -1302,16 +1240,15 @@ git commit -m "feat: expose headless BioHarness P0 CLI"
 - Modify: `.github/workflows/ci.yml`
 
 **Interfaces:**
-- Consumes: all Core services.
-- Produces: one complete fake-provider vertical slice proving Core works with no Genome-web dependency.
+- Produces: executable Core acceptance evidence using only a fake external provider.
 
-- [ ] **Step 1: Implement a deterministic fake external provider process**
+- [ ] **Step 1: Implement deterministic fake process**
 
-`tests/fixtures/fake_science_provider.py` accepts `--input`, `--outdir`, and `--mode success|fail`. In success mode it writes `result.txt`, `provider_evidence.json`, then exits 0. In fail mode it writes stderr and exits 9. It contains no Genome-web/TF logic.
+`fake_science_provider.py` accepts `--input`, `--outdir`, `--mode success|fail`. Success writes `result.txt` and `provider_evidence.json`, exits 0. Failure writes stderr and exits 9. It contains no Genome-web/TF logic.
 
-- [ ] **Step 2: Write the full vertical-slice test**
+- [ ] **Step 2: Write complete success flow**
 
-The test performs:
+Test:
 
 ```text
 ScientificTaskSpec
@@ -1323,39 +1260,27 @@ ScientificTaskSpec
 -> RunSpec hashes
 -> current launch authorization
 -> RunAttempt intent transaction
--> local fake provider process
+-> fake external process
 -> Artifact registration
 -> provider_contract + artifact_integrity + provenance_completeness reports
 -> candidate@1 ValidationEvaluation PASS
 -> MemoryCandidate record/retrieval
 ```
 
-Assertions include:
+Assert one RunSpec, one RunAttempt, ordered RunEvents, correct artifact digest, no canonical/publication record, no authority escalation from MemoryCandidate.
 
-```text
-no provider defaults in TaskSpec
-one RunSpec
-one RunAttempt
-ordered RunEvents
-artifact digest matches bytes
-validation PASS does not create canonical state
-memory recall creates no PolicyDecision
-```
+- [ ] **Step 3: Write unknown-outcome flow**
 
-- [ ] **Step 3: Add unknown-outcome vertical test**
+Use `FakeProcessRunner(raise_after_possible_spawn=True)`. Assert UNKNOWN, no second spawn, and new start blocked until reconciliation.
 
-Inject `BindingUncertain` after submission intent. Assert RunAttempt UNKNOWN, no second process launch, and a subsequent `run start` is blocked until reconciliation.
-
-- [ ] **Step 4: Run the complete Core suite in CI**
-
-Run:
+- [ ] **Step 4: Run complete Core suite in CI**
 
 ```bash
 alembic upgrade head
 python -m pytest tests/unit tests/contract tests/integration -q
 ```
 
-Expected: PASS, without the Genome-web repository, Nextflow, MAFFT, IQ-TREE, Pi, or DeepSeek Harness installed.
+Expected: PASS without Genome-web, Nextflow, MAFFT, IQ-TREE, Pi, or DeepSeek Harness installed.
 
 - [ ] **Step 5: Commit**
 
@@ -1371,11 +1296,11 @@ git commit -m "test: prove provider-agnostic P0 vertical slice"
 Before declaring this plan implemented:
 
 1. Fresh CI on the implementation head must pass `tests/unit`, `tests/contract`, and `tests/integration` against PostgreSQL 16.
-2. The Core dependency-boundary test must prove Genome-web reference code is not imported by `src/bioharness`.
-3. The fake-provider vertical slice must prove submission intent, unknown handling, typed validation, and non-authoritative memory semantics.
-4. Do not mark the Genome-web TF acceptance scenarios PASS from this plan; they remain `NOT_RUN` until the separate reference-integration plan is executed in the isolated server environment.
-5. Do not claim production readiness, publication support, remote schedulers, durable cancellation, or exactly-once guarantees.
+2. Core dependency-boundary test must prove Genome-web reference code is not imported by `src/bioharness`.
+3. Fake-provider vertical slice must prove current authorization, durable submission intent, unknown handling, immutable artifacts, typed validation, and non-authoritative memory.
+4. Do not mark Genome-web TF scenarios PASS from this plan; they remain `NOT_RUN` until the separate reference plan executes.
+5. Do not claim production readiness, publication support, remote schedulers, durable cancellation, or provider exactly-once guarantees.
 
 ## Follow-On Plan Boundary
 
-After Core passes this plan, execute `docs/superpowers/plans/2026-09-18-genome-web-tf-reference-integration.md`. That plan may depend on BioHarness public ports and the external Genome-web repository, but BioHarness Core must never depend on it.
+After Core passes this plan, execute `docs/superpowers/plans/2026-09-18-genome-web-tf-reference-integration.md`. That plan may depend on BioHarness public contracts and the external Genome-web repository; BioHarness Core must never depend on it.
