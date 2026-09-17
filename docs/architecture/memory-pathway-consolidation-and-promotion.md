@@ -1,113 +1,70 @@
 # BioHarness Memory Pathway Consolidation and Promotion
 
-Date: 2026-09-17
-Status: Design record v1 for review
-Scope: Criteria and lifecycle for turning temporary TaskMemoryGraph structure into reusable Memory Pathways, while keeping activation, scientific maturity, and scope promotion independent.
+Date: 2026-09-18
+Status: Authoritative memory-promotion design record
+Runtime status: NOT_IMPLEMENTED
+Validation status: NOT_RUN
+Scope: How temporary TaskMemoryGraph structure becomes reusable MemoryPathway knowledge while keeping activation, maturity, scope, scientific impact, and evidence independence separate.
 
-Related documents:
+Cross-cutting scientific/run semantics are authoritative in `scientific-contracts-and-run-semantics.md`.
 
-- `docs/architecture/hierarchical-associative-memory.md`
-- `docs/architecture/provider-composition-and-research-memory.md`
-- `docs/architecture/reference-architectures.md`
-- `docs/superpowers/specs/2026-09-17-bioharness-architecture-design.md`
+## 1. Decision
 
-## 1. Design Decision
+BioHarness must not consolidate a MemoryPathway merely because a subgraph appears frequently.
 
-BioHarness must not consolidate a Memory Pathway because a subgraph appears frequently.
+A repeated pathway can be common but wrong, stable but project-specific, reliable but dormant, or frequently edited while still immature.
 
-A repeated scientific chain can be:
+Therefore pathway learning uses independent dimensions plus hard gates rather than one opaque scalar score.
 
-- heavily used but unstable;
-- heavily used but wrong;
-- reliable but project-specific;
-- stable but currently dormant;
-- broadly reusable but temporarily inactive.
-
-Therefore pathway learning uses **independent dimensions plus hard promotion gates**, not one opaque scalar score.
-
-The core rule is:
+Conceptually:
 
 ```text
-frequency       -> activation
-scientific evidence -> reliability
-low mutation    -> stability
-cross-scope reuse -> generality
+frequency / task relevance   -> activation
+scientific evidence          -> reliability
+structural consistency       -> maturity signal
+independent context diversity-> scope/generalization signal
+change-impact compatibility  -> reuse/revalidation requirement
 ```
 
-These signals may contribute to an auxiliary `ConsolidationConfidence`, but no numerical score may bypass evidence, contradiction, validation, or scope-promotion gates.
+No aggregate score can bypass evidence, contradiction, scientific-assumption, or scope-promotion gates.
 
-## 2. Three Independent Axes
+## 2. Independent Axes
 
-Every durable Memory Pathway should expose three separate dimensions.
-
-### 2.1 Activation
-
-Question: how likely should this pathway be recalled now?
-
-Typical states:
+### Activation
 
 ```text
-HOT
-WARM
-DORMANT
+HOT | WARM | DORMANT
 ```
 
-Activation is affected by current task relevance, active-project relevance, recent use, explicit pinning, semantic/graph similarity, and current user/method context.
+How likely should this pathway be recalled now?
 
-High frequency primarily affects activation. It does not by itself establish scientific validity.
-
-### 2.2 Maturity / Scientific Stability
-
-Question: how mature and trustworthy is this pathway?
-
-Typical states:
+### Maturity / Stability
 
 ```text
-EXPLORATORY
-ADAPTIVE
-STABLE
-CONTRADICTED
-DEPRECATED
+EXPLORATORY | ADAPTIVE | STABLE | CONTRADICTED | DEPRECATED
 ```
 
-Maturity depends on evidence, successful validated use, contradiction history, mutation rate, and version/scope compatibility.
+How mature/evidence-backed is the reusable structure under its stated scope?
 
-### 2.3 Scope
-
-Question: where is this pathway justified for reuse?
-
-Recommended scopes:
+### Scope
 
 ```text
-TASK
-PROJECT
-METHOD
-LAB
+TASK | PROJECT | METHOD | LAB
 ```
 
-A pathway can be `STABLE + PROJECT` forever. Maturity never implies broader scope.
+Where is reuse justified?
 
-This is a hard invariant:
+Hard rule:
 
-> **Pathway maturity promotion and pathway scope promotion are separate operations.**
+> Maturity promotion and scope promotion are separate operations.
+
+A pathway may remain `STABLE + PROJECT` indefinitely.
 
 ## 3. Candidate Discovery
 
-Candidate pathways may originate from either automatic mining or explicit human authorship.
+Candidates may be human-authored or proposed from repeated TaskMemoryGraphs.
 
-### Automatic proposal
-
-Repeated TaskMemoryGraphs are compared to find structurally similar subgraphs. Task-specific constants are abstracted into candidate slots.
-
-Example observations:
-
-```text
-Gene A -> Dataset 1 -> DESeq2 -> DEG -> ID map -> GO
-Gene B -> Dataset 2 -> DESeq2 -> DEG -> ID map -> GO
-Gene C -> Dataset 3 -> edgeR  -> DEG -> ID map -> GO
-```
-
-Possible candidate:
+Automatic proposal may abstract task-specific values into declared slots, for example:
 
 ```text
 GeneRef
@@ -118,68 +75,39 @@ GeneRef
   -> FunctionalEnrichment
 ```
 
-Possible adaptive slots:
+Possible adaptive slots include species, assembly, dataset, contrast, DE method, software version, annotation source, FDR preset, and background universe.
 
-```text
-species
-reference assembly
-expression dataset
-contrast
-DE method
-software version
-annotation source
-FDR preset
-background universe
-```
-
-### Human-authored proposal
-
-A researcher may explicitly define a pathway from a laboratory SOP, paper-derived procedure, or repeatedly used research strategy. Human authorship does not bypass evidence and validation requirements for shared promotion.
+Declaring a slot adaptive means the field is expected to vary; it does **not** say changes are scientifically low-impact.
 
 ## 4. Promotion Gates
 
-A candidate is evaluated by multiple gates. These gates are conceptually independent.
-
 ### 4.1 Evidence Gate
 
-The pathway must retain traceable support from authoritative or evidence-bearing objects such as:
+A candidate retains traceable support from evidence-bearing objects such as:
 
-- Runs;
+- RunSpec/RunAttempt;
 - Artifacts;
-- QC results;
+- typed ValidationReports;
+- Findings;
 - Decisions;
-- validated Findings;
 - Papers/reference workflows;
-- benchmark results.
+- benchmark evidence.
 
-A pathway derived only from model-generated text or retrieval co-occurrence cannot become stable shared scientific memory.
+Model-generated text/retrieval co-occurrence alone cannot produce stable shared scientific memory.
 
 ### 4.2 Reliability Gate
 
-Reliability asks whether the pathway produces acceptable scientific outcomes under its stated scope.
+Reliability asks whether the pathway supports scientifically acceptable work under its stated scope.
 
-Signals may include:
+Signals may include typed validation, appropriate QC, manual review, benchmark agreement, reproducibility, correct null/negative outcomes, complete provenance, and known failure handling.
 
-```text
-validated successful runs
-QC pass rate
-manual validation
-benchmark agreement
-reproducibility across reruns
-complete provenance
-```
+Raw execution success is insufficient.
 
-Raw execution success is insufficient. A process can execute without error and still be scientifically wrong.
+### 4.3 Structural Stability Gate
 
-### 4.3 Stability Gate
+Record whether pathway topology/reasoning roles change materially over time.
 
-Stability asks whether the pathway has stopped changing materially.
-
-BioHarness should distinguish at least two mutation classes.
-
-#### Structural mutation
-
-Changes to pathway topology or scientific reasoning, for example:
+Examples:
 
 ```text
 DEG -> GO
@@ -191,27 +119,29 @@ becoming:
 DEG -> ID mapping -> background validation -> GO
 ```
 
-Structural mutation strongly reduces confidence that the pathway is mature.
+is a meaningful structural revision and usually indicates the pathway is still adapting.
 
-#### Slot mutation
+Slot mutations are recorded separately from structural mutations for maturity/history statistics.
 
-Changes within declared adaptive slots, for example:
+### 4.4 Scientific Change-Impact Gate
 
-```text
-FDR 0.05 -> 0.01
-DESeq2 -> edgeR
-annotation v3 -> v4
-```
+Structural-versus-slot classification does **not** determine scientific invalidation.
 
-Slot mutation may be expected and should carry a much smaller stability penalty when the pathway explicitly declares the slot as adaptive.
+Every result-/assumption-sensitive slot change is evaluated by the authoritative `ChangeImpactContract` and compatibility predicates.
 
-Frequent use plus frequent structural editing means the pathway is important but still `ADAPTIVE`, not `STABLE`.
+Examples:
 
-### 4.4 Contradiction Gate
+- display/explanation preference may be presentation-only;
+- FDR change alters selection and downstream gene-set evidence;
+- annotation v3 -> v4 may invalidate mapping/background/enrichment;
+- DESeq2 -> edgeR may alter method assumptions/results;
+- bulk -> single-cell changes experimental-unit/model assumptions even if the pathway graph looks similar.
 
-Contradictory evidence is not treated as a simple negative count against many historical successes.
+A small slot change can therefore require more revalidation than a larger-looking structural/presentation change.
 
-Contradictions should be typed by severity:
+### 4.5 Contradiction Gate
+
+Contradictions are typed by severity, for example:
 
 ```text
 MINOR
@@ -219,303 +149,165 @@ MAJOR
 FATAL
 ```
 
-- `MINOR`: presentation or non-scientific preference; usually does not affect the stable core.
-- `MAJOR`: invalidates an adaptive slot/default or an important branch and triggers partial thaw.
-- `FATAL`: challenges the core scientific logic and immediately prevents stable reuse until reviewed.
+- `MINOR`: does not affect scientific core/applicability;
+- `MAJOR`: invalidates an important default/branch/assumption and triggers targeted thaw/revalidation;
+- `FATAL`: challenges core applicability and blocks stable reuse until resolved.
 
-A single high-quality fatal contradiction can override many prior apparently successful uses.
+One high-quality fatal contradiction can override many historical uses.
 
-### 4.5 Generalization Gate
+### 4.6 Generalization Gate
 
-Generalization asks whether the pathway is reusable beyond one local context.
+Run count is not independent support.
 
-Raw run count is not sufficient.
-
-```text
-100 successful runs in one project
-```
-
-may still support only `PROJECT` scope.
-
-More informative support includes diversity across:
+Scope promotion considers diversity/correlation across relevant dimensions such as:
 
 ```text
+independent experiments/datasets
 projects
-datasets
-species or biological contexts when relevant
-task instances
-users/agents
-software/environment revisions
+species/biological contexts when relevant
+method/software revisions
+users/agents only when operationally relevant
+validation types
 ```
 
-Scope promotion should consider **independent support diversity**, not merely total frequency.
+Repeated reruns of one biological experiment do not establish METHOD/LAB generality.
 
-## 5. Lifetime Statistics and Recent-Window Statistics
+## 5. Evidence Statistics
 
-BioHarness should retain both lifetime history and recent behavior.
-
-Lifetime statistics preserve provenance and long-term evidence.
-
-Recent-window statistics are more informative for current stability.
-
-Example:
+Useful summaries distinguish lifetime and recent behavior, while keeping scientific independence explicit:
 
 ```text
-first 20 uses: 14 pathway edits
-last 12 uses: 0 structural edits, 1 slot update
-```
-
-A lifetime mutation ratio alone would incorrectly keep the pathway permanently unstable.
-
-Therefore maturity evaluation should use:
-
-```text
-lifetime_support
-lifetime_failures
-lifetime_mutations
-+
-recent_support
-recent_failures
+execution_count
+successful_execution_count
+valid_null_or_negative_count
+distinct_input_identity_count
+distinct_experiment_count
+independent_project_or_study_count
+contradiction_count
+lifetime_structural_mutations
 recent_structural_mutations
+lifetime_slot_mutations
 recent_slot_mutations
 ```
 
-The exact recent window can later be implemented as a configurable number of activations, a project phase, or a time window. The contract should not hard-code one choice initially.
+These statistics support review/ranking; none is scientific truth by itself.
 
 ## 6. Maturity Promotion
 
-A typical maturity progression is:
+Typical progression:
 
 ```text
 OBSERVED SUBGRAPH
-      ↓ repeated occurrence or explicit authorship
-CANDIDATE
-      ↓ evidence + usable outcome
-ADAPTIVE
-      ↓ strong reliability + declining structural mutation
-STABLE
+  -> CANDIDATE
+  -> ADAPTIVE
+  -> STABLE
 ```
 
-`CONTRADICTED` and `DEPRECATED` are not lower confidence values on the same scale; they are explicit scientific/lifecycle states.
+Promotion requires evidence/reliability plus decreasing unresolved structural churn under the stated scope.
 
-A pathway may move from `STABLE` back to `ADAPTIVE` through audited thawing when new evidence, version change, or environmental mismatch requires modification.
+`CONTRADICTED` and `DEPRECATED` are lifecycle/scientific states, not low numerical confidence.
+
+A stable pathway can return to `ADAPTIVE` through explicit thaw/reconsolidation when new evidence/version changes require revision.
 
 ## 7. Scope Promotion
 
-Scope is promoted independently from maturity.
-
-A typical route is:
+Typical route:
 
 ```text
 TASK
-  ↓
-PROJECT
-  ↓ independent reuse / abstraction
-METHOD_CANDIDATE
-  ↓ validation across relevant contexts
-METHOD
-  ↓ explicit institutional decision when justified
-LAB
+  -> PROJECT
+  -> METHOD_CANDIDATE
+  -> METHOD
+  -> LAB
 ```
 
-Conceptually:
+METHOD/LAB promotion requires independent support under the intended scope and an explicit governed Decision/review when scientific applicability is non-trivial.
 
-```text
-PROJECT_ADAPTIVE
-      ↓ stability
-PROJECT_STABLE
-      ↓ independent cross-project evidence
-METHOD_CANDIDATE
-      ↓ abstraction + revalidation
-METHOD_STABLE
-      ↓ explicit Decision / human approval
-LAB_SHARED
-```
+High use or high maturity in one project cannot silently create shared institutional knowledge.
 
-No automatic rule should convert a stable project-specific pathway into laboratory-wide scientific knowledge merely because it has high frequency or a high aggregate score.
+## 8. Automatic vs Human/Governed Responsibilities
 
-## 8. Automatic vs Human Responsibilities
-
-The first implementation should automate evidence collection and proposals more aggressively than scientific promotion.
-
-### BioHarness may automate
+BioHarness may automate:
 
 - repeated-subgraph detection;
-- candidate pathway creation;
-- usage/support statistics;
-- success/failure statistics;
-- structural and slot mutation statistics;
-- contradiction detection/proposals;
+- candidate creation;
+- usage/evidence statistics;
+- contradiction proposals;
 - activation adjustment;
 - frozen-core/adaptive-slot proposals;
-- closeout consolidation proposals;
-- dormant reactivation proposals;
-- compatibility checks.
+- compatibility/change-impact checks;
+- closeout/reactivation proposals.
 
-### Human/Decision gate should initially remain for
+Initial human/governed gates remain for:
 
-- promoting important shared scientific pathways;
-- widening scope from PROJECT to METHOD when scientific applicability is non-trivial;
-- LAB_SHARED promotion;
-- accepting or resolving MAJOR/FATAL contradictions;
-- changing locked institutional knowledge;
-- overriding explicit scientific policy.
+- important PROJECT -> METHOD/LAB scope widening;
+- accepting/resolving MAJOR/FATAL contradictions;
+- changing locked shared knowledge;
+- promoting scientific defaults/policy/canonical recommendations.
 
-Later, empirical benchmark evidence may justify relaxing selected gates, but that is not assumed in the initial architecture.
+Automatic pathway mining itself is deferred until simpler memory baselines are evaluated.
 
-## 9. Consolidation Confidence Is Advisory
+## 9. Consolidation Confidence
 
-A composite confidence may be useful for ranking candidate pathways for review.
-
-Conceptually it may consider:
-
-```text
-reliability
-stability
-evidence strength
-reuse diversity
-generality
-contradiction burden
-version compatibility
-```
-
-However:
+A composite confidence may rank candidates for review but remains advisory.
 
 ```text
 ConsolidationConfidence != scientific truth
 ConsolidationConfidence != scope authority
-ConsolidationConfidence != policy authority
+ConsolidationConfidence != Policy authority
 ```
 
-It must never bypass a hard gate.
+Do not hard-code arbitrary universal weights before benchmark evidence exists.
 
-Initial architecture should avoid embedding arbitrary fixed weights into the domain model. Weighting can be benchmarked later and may differ by memory/pathway type.
+## 10. Reactivation / Reconsolidation
 
-## 10. Example: Active Project to Dormant Reusable Knowledge
+Reactivation never means "reuse unchanged graph = reuse valid evidence".
 
-During an active project:
+Required sequence:
 
 ```text
-uses = 38
-successful = 31
-failures = 7
-structural_mutations = 8
-slot_mutations = 8
-independent_projects = 1
+dormant/stable pathway
+  -> relevant task
+  -> current data/method/policy/contradiction resolution
+  -> ChangeImpact + compatibility traversal
+  -> reuse compatible components/evidence only
+  -> thaw/recompute/revalidate affected dependencies
+  -> new evidence
+  -> new versioned pathway revision
 ```
 
-Interpretation:
+The old revision remains addressable.
+
+## 11. Project Closeout
+
+Closeout can replay project history to propose reusable knowledge, but it should inspect all evidence-bearing outcomes:
+
+- successful analyses;
+- valid null/negative Findings;
+- failed executions with reusable lessons;
+- scientifically blocked designs;
+- contradictions;
+- Decisions and validation evidence.
+
+Closeout separates project-only knowledge from reusable Method/Lab candidates and reduces activation of low-value working traces. It does not delete historical evidence.
+
+## 12. MemoryPathway Promotion Invariants
+
+1. Frequency primarily affects recall/activation, not scientific authority.
+2. Activation, maturity, and scope remain separate.
+3. Run count is not independent biological evidence.
+4. Slot changes are not automatically lower scientific impact than structural changes.
+5. Dependency-aware ChangeImpact determines reuse/revalidation.
+6. Fatal contradictions can block reuse regardless of historical frequency.
+7. Shared scope widening requires independent support and governed promotion.
+8. Null/negative outcomes can support a reliable pathway when scientifically valid.
+9. Automatic discovery/proposals do not bypass human/governed scientific promotion gates.
+10. Previous pathway revisions remain traceable through thaw/reconsolidation.
+
+## 13. Status
 
 ```text
-activation = HOT
-maturity = ADAPTIVE
-scope = PROJECT
+pathway_promotion_contract = DESIGNED
+runtime = NOT_IMPLEMENTED
+validation = NOT_RUN
 ```
-
-Later in the same project:
-
-```text
-last 12 uses:
-  successful = 12
-  structural_mutations = 0
-  slot_mutations = 1
-  fatal_contradictions = 0
-```
-
-The pathway may become:
-
-```text
-activation = HOT
-maturity = STABLE
-scope = PROJECT
-```
-
-At project closeout:
-
-```text
-activation -> WARM -> DORMANT
-maturity remains STABLE
-scope remains PROJECT unless separately promoted
-```
-
-If a later independent project reactivates and successfully adapts the pathway, the system gains evidence for a possible METHOD-level abstraction. It does not automatically perform that promotion.
-
-## 11. Minimal Pathway Record
-
-A pathway record should eventually support at least the following conceptual fields:
-
-```text
-identity / revision
-scope
-maturity
-activation
-
-frozen_core
-adaptive_slots
-
-support statistics
-success/failure statistics
-validation evidence
-mutation history
-contradiction history
-scope diversity
-
-source TaskMemoryGraphs
-source Runs
-source Artifacts
-source Decisions
-source Papers / references
-
-last_activated_at
-last_modified_at
-last_validated_at
-last_contradicted_at
-```
-
-This is a semantic contract, not a final database schema.
-
-## 12. Relationship to Mature Work
-
-BioHarness should reuse mature mechanisms rather than reproducing them.
-
-Relevant inspirations already cataloged in `reference-architectures.md` include:
-
-- **Agent Workflow Memory (AWM)**: induction of reusable routines from historical trajectories;
-- **LEGOMem**: modular procedural-memory units rather than only monolithic trajectories;
-- **Voyager**: successful behaviors promoted into a reusable skill library;
-- **Reflexion / ExpeL**: outcome- and feedback-derived experiential memory;
-- **HippoRAG / A-MEM**: associative/graph-based retrieval and evolving memory relationships;
-- **TiMEM**: temporal/hierarchical consolidation patterns;
-- **Graphiti**: temporal graph infrastructure and evolving relations;
-- **Complementary Learning Systems**: conceptual inspiration for fast task memory plus slower consolidation.
-
-BioHarness-specific semantics remain scientific evidence, provenance, project lifecycle, pathway scope, controlled thawing, and explicit Decision/Policy boundaries.
-
-## 13. Architecture Invariants
-
-1. Frequency affects activation more directly than scientific maturity.
-2. Execution success is not equivalent to scientific validation.
-3. High-frequency/high-mutation pathways remain adaptive.
-4. Structural mutation and adaptive-slot mutation are not equivalent.
-5. Contradictions are severity-aware; fatal scientific contradiction can block reuse regardless of historical frequency.
-6. Recent stability and lifetime provenance are both retained and used for different purposes.
-7. Maturity promotion and scope promotion are independent.
-8. A pathway may remain `STABLE + PROJECT` indefinitely.
-9. Cross-project diversity, not raw run count, is the main signal for broader generalization.
-10. Composite consolidation scores are advisory and cannot bypass evidence/contradiction/promotion gates.
-11. METHOD/LAB scientific promotion is auditable and initially requires an explicit Decision/human gate where applicability is non-trivial.
-12. Scope promotion never directly creates or overrides Policy.
-
-## 14. Open Implementation Choices
-
-The following are intentionally not fixed by this design record and should be benchmarked or chosen during implementation planning:
-
-- exact formula for `ConsolidationConfidence`;
-- recent-window size;
-- graph-substructure similarity algorithm;
-- thresholds for candidate generation;
-- exact vector/graph backend;
-- whether pathway-mining proposals use deterministic graph mining, LLM-assisted abstraction, or a hybrid;
-- which low-risk scope promotions can eventually be automated.
-
-The architecture requires these decisions to remain observable, versioned, and replaceable rather than hidden in an opaque model.
