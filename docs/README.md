@@ -53,7 +53,7 @@ These document external systems, papers, standards, and internal projects used t
 - `docs/architecture/multi-perspective-review-2026-09-18.md`
 - `docs/architecture/workflow-executor-capabilities-and-p0-source-audit.md`
 
-These preserve why the contracts were changed and what sources were inspected. They are non-authoritative rationale records. Final rules have been integrated into the authoritative contract/P0/validation documents.
+These preserve why the contracts were changed and what sources were inspected. They are non-authoritative rationale records and never participate in precedence resolution. Final rules have been integrated into the authoritative contract/P0/validation documents.
 
 ### Plans
 
