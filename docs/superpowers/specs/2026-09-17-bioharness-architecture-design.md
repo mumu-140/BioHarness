@@ -1,958 +1,881 @@
 # BioHarness Architecture Design
 
 Date: 2026-09-17
-Status: Draft for review
-Scope: Architecture only; no implementation choices below should be treated as irreversible unless marked as an invariant.
+Status: Draft v2 for review
+Scope: Architecture only. This document defines the stable boundaries and core semantics of BioHarness; scientific tools, workflow engines, memory engines, model providers, data stores, and presentation components should be reused through adapters whenever possible.
 
 ## 1. Purpose
 
-BioHarness is an internal research platform centered on the laboratory's study species, datasets, projects, and reproducible computational workflows.
+BioHarness is a **headless research analysis harness** for laboratory computational science.
 
-Its primary goal is not to re-implement bioinformatics algorithms. It provides the governance and integration layer that makes existing tools, workflows, environments, models, compute resources, and research outputs understandable, reusable, reproducible, auditable, and easy to present.
+It is not a genome database, not a web portal, not a new workflow language, and not a replacement for mature bioinformatics software. Its role is to make scientific analysis performed by humans and AI agents modular, governed, reproducible, inspectable, reusable, and cumulatively smarter over time.
 
-The platform should answer, for every analysis:
+BioHarness must remain usable without any frontend. The same research operation should be possible through API, CLI, SDK, MCP/agent clients, notebooks, or a Web workbench.
 
-- What data were used?
-- Which software/workflow was used, at which version?
-- Which parameters and environment were used?
-- Why was this approach selected?
-- What was produced?
-- Which output is exploratory, candidate, validated, or canonical?
-- Can another person or agent reproduce the same result?
-- Can the workflow be reused with a different dataset or species?
+The central question BioHarness answers is:
 
-## 2. Architectural Position
+> Given available scientific data and tools, how should this research task be executed, under which rules, with which context, what evidence was produced, and what should the laboratory remember for the next analysis?
 
-BioHarness is a **research control plane**, not a monolithic bioinformatics suite.
+## 2. System Boundary
 
-The system adopts the following mature engineering patterns:
+The system is divided into three independent roles.
 
-- Modular monolith for the control plane
-- Hexagonal architecture / ports and adapters for external capabilities
-- Immutable runs and artifacts inspired by Git/Bazel/Nix-style content-addressed systems
-- Reconciliation between desired and observed execution state, inspired by Kubernetes controllers
-- CQRS-lite for separating scientific write models from presentation read models
-- Registry patterns for datasets, tools, workflows, models, environments, and compute resources
-- Provenance/lineage concepts compatible with OpenLineage and research-object standards
-- GA4GH-like abstractions for data, tool/workflow, and execution interfaces
-- External workflow engines such as Nextflow or Snakemake instead of a custom workflow language
-- MCP/API/RPC/CLI integration instead of reimplementing existing tools
+### 2.1 Data Providers
 
-Scientific implementations remain external whenever practical.
+Data providers own scientific data and domain-specific query semantics.
 
-## 3. Core Invariants
+Examples:
 
-These rules are architectural invariants and should be difficult to bypass.
+- Genome-web backend and PostgreSQL
+- filesystem/object storage
+- external biological databases
+- future transcriptome/phenotype/variant stores
+- project-specific data repositories
 
-### I1. Core does not implement scientific algorithms
+Genome-web remains the first mature biological Data Provider. BioHarness should query or reference it through stable provider interfaces rather than reimplement Gene, Transcript, Protein, Annotation, TF, Structure, Homology, and related domain tables.
 
-BioHarness manages scientific assets and lifecycle. Existing software is connected through adapters.
+### 2.2 BioHarness
 
-### I2. Analysis modules do not write canonical database state directly
+BioHarness owns analysis and research governance:
 
-A module writes outputs to its execution workspace. Outputs are validated and ingested by BioHarness.
+- Research Context
+- Policy
+- Recipe
+- Module Registry
+- Workflow
+- Experiment
+- Run
+- Artifact
+- Validation
+- Decision
+- Research Memory
+- Provenance
+- Agent governance
 
-### I3. Dataset, Run, and Artifact records are immutable by default
+### 2.3 Clients
 
-A rerun creates a new Run and new Artifacts. Existing scientific history is never overwritten in place.
+Clients only operate and present BioHarness capabilities:
 
-### I4. Canonical state is a pointer, not a destructive overwrite
+- CLI
+- REST API
+- SDK
+- MCP/agent clients
+- notebook integrations
+- Web frontend
 
-A new validated result can replace the current canonical pointer while older artifacts remain addressable.
+The Web frontend is optional and must not contain authoritative scientific workflow logic.
 
-### I5. Agents operate through the control plane for governed work
+## 3. Architectural Position
 
-Agents may explore freely in designated scratch contexts, but official execution, publication, promotion, and state-changing actions use BioHarness APIs/contracts.
+BioHarness is a **Research Control Plane**.
 
-### I6. Frontend reads presentation models
+Its architecture combines mature engineering patterns rather than inventing infrastructure already solved elsewhere:
 
-The frontend does not need to understand Nextflow work directories, DESeq2 output layouts, EvoPM internals, or raw analysis filesystem structure.
+- modular monolith for the first control-plane implementation
+- ports/adapters for tools, data, workflow, compute, model, memory, and presentation providers
+- immutable Run/Artifact records
+- event/provenance lineage
+- policy inheritance and resolved context snapshots
+- registry-based capability discovery
+- external workflow engines such as Nextflow/Snakemake
+- MCP/API/RPC/CLI tool integration
+- content-addressed reuse where scientific equivalence is defensible
+- CQRS-lite read models for Web presentation
 
-### I7. Authoritative facts are not stored only in AI memory
+The architectural novelty is not the existence of a workflow engine, vector memory, graph store, or web UI. The distinctive layer is the scientific closed loop connecting **evidence-backed memory, policy, context compilation, execution, validation, and future behavior**.
 
-Canonical references, policies, versions, decisions, datasets, and run metadata live in explicit registries/databases/Git-backed definitions.
+## 4. Core Invariants
 
-## 4. High-Level Architecture
+### I1. BioHarness does not reimplement mature scientific algorithms
+
+Scientific software remains external whenever practical and is connected through registered providers/adapters.
+
+### I2. BioHarness is headless
+
+Removing the Web frontend must not prevent analysis, validation, result inspection, or memory/policy operation.
+
+### I3. Data Providers remain authoritative for source scientific data
+
+BioHarness stores stable references, provenance, and analysis state. It does not duplicate mature biological databases merely to achieve ownership.
+
+### I4. Official computation is governed
+
+Agents may explore in scratch contexts, but official runs, publication, promotion, shared workflow changes, and canonical decisions pass through BioHarness contracts.
+
+### I5. Run and Artifact history is immutable by default
+
+Re-analysis creates new Runs/Artifacts. Historical evidence is not overwritten.
+
+### I6. Scientific status is explicit
+
+Artifacts and memories have trust/lifecycle states. A file existing on disk does not make it an official result.
+
+### I7. Memory is evidence-linked, not free-floating model recollection
+
+Scientific memories must preserve source, time, scope, confidence, and where possible direct links to Runs, Artifacts, Papers, Decisions, or Policies.
+
+### I8. Memory can influence future execution only through explicit context/policy resolution
+
+Retrieval alone must not silently rewrite workflow behavior.
+
+### I9. Frontend owns presentation, not research semantics
+
+The UI renders state and invokes commands exposed by BioHarness. It must not become the source of truth for workflow definitions, policies, defaults, or scientific status.
+
+## 5. High-Level Architecture
 
 ```text
-                         Users / Agents
-                              |
-                    +---------+---------+
-                    |                   |
-                  Web UI          Agent Gateway
-                    |            MCP / API / SDK
-                    +---------+---------+
-                              |
-                 +------------v-------------+
-                 |       CONTROL PLANE       |
-                 |                          |
-                 | Species / Projects       |
-                 | Datasets / Resources     |
-                 | Modules / Workflows      |
-                 | Runs / Artifacts         |
-                 | Policies / Decisions     |
-                 | Validation / Promotion   |
-                 | Search / Read Models     |
-                 +------+----------+--------+
-                        |          |
-              +---------v--+   +---v----------------+
-              | DATA PLANE |   | EXECUTION PLANE    |
-              |            |   |                    |
-              | PostgreSQL |   | Runner abstraction |
-              | S3 / MinIO |   | Nextflow           |
-              | Parquet    |   | Snakemake           |
-              | Zarr/h5ad  |   | Docker/Apptainer   |
-              | filesystem |   | SSH / Slurm         |
-              +------------+   +----------+---------+
-                                         |
-                          +--------------v-------------+
-                          |   CAPABILITY PROVIDERS      |
-                          |                            |
-                          | TBtools RPC/API            |
-                          | nf-core                    |
-                          | Galaxy                     |
-                          | R / Bioconductor           |
-                          | Python tools               |
-                          | EvoPM / EGT / lab tools    |
-                          | external APIs / MCP        |
-                          | models / databases         |
-                          +----------------------------+
+                          USERS / AGENTS
+                               |
+        +----------------------+----------------------+
+        |                      |                      |
+       CLI                   MCP/SDK                Web
+        |                      |                      |
+        +----------------------+----------------------+
+                               |
+                               v
+                    +------------------------+
+                    |      BioHarness        |
+                    |  Research Control Plane|
+                    +------------------------+
+                    | Context Compiler       |
+                    | Policy Engine          |
+                    | Recipe/Module Registry |
+                    | Workflow/Experiment    |
+                    | Run Manager            |
+                    | Artifact/Validation    |
+                    | Decision Engine        |
+                    | Provenance             |
+                    | Research Memory Plane  |
+                    +----+-----------+-------+
+                         |           |
+              +----------+           +-------------------+
+              |                                          |
+              v                                          v
+      +----------------+                         +------------------+
+      | Data Providers |                         | Execution/Tools  |
+      +----------------+                         +------------------+
+      | Genome-web     |                         | Nextflow         |
+      | PostgreSQL     |                         | Snakemake        |
+      | files/S3       |                         | nf-core          |
+      | external DBs   |                         | MCP/API/RPC/CLI  |
+      +----------------+                         | TBtools          |
+                                                 | R/Python         |
+                                                 | lab tools        |
+                                                 +------------------+
 ```
 
-## 5. Primary Domain Objects
+## 6. Core Domain Objects
 
-The control plane should remain centered on a small stable domain model.
+BioHarness should keep a small stable core.
 
-### 5.1 Species
+### 6.1 Project
 
-Represents a long-lived biological research object.
+The research scope in which analysis, rules, memories, decisions, and outputs are interpreted.
 
-Examples:
-- Populus trichocarpa
-- Arabidopsis thaliana
-- Populus alba
+### 6.2 ResearchContext
 
-Species owns or references canonical biological resources but does not own project-specific results.
+A resolved, immutable snapshot of what a user/agent was allowed and expected to know for a specific governed action.
 
-### 5.2 Dataset
+It can contain references to:
 
-Represents a versioned input or reusable data product.
+- project
+- user/agent
+- scientific data references
+- canonical references from Data Providers
+- applicable policies
+- available workflows/modules
+- runtime environments/models
+- relevant validated memories
+- prior failures/decisions
 
-Examples:
-- GenomeAssembly
-- GeneAnnotation
-- ProteinSet
-- ReadSet
-- ExpressionMatrix
-- VariantSet
-- PhenotypeTable
-- PeakSet
-- StructureSet
+Every official Run should store a context snapshot ID/hash.
 
-Datasets should have stable logical identifiers independent of physical storage path.
+### 6.3 Policy
 
-### 5.3 Project
+Normative rules. Examples:
 
-Represents a research question or work context.
+- raw data are immutable
+- official results require provenance
+- a project excludes sample X23
+- a workflow requires at least three replicates
+- an agent cannot directly promote a canonical result
 
-Projects reference Species and Datasets and contribute project-specific policies, decisions, runs, and results.
+Policies are not memories; they prescribe behavior.
 
-### 5.4 Module
+### 6.4 Recipe
 
-Represents one reusable computational capability.
+Scientific intent and rationale.
 
-A module may be backed by:
-- CLI
-- Python/R package
-- container
-- REST API
-- MCP server
-- TBtools RPC
-- remote service
+A Recipe explains **what scientific method is being applied and why**, independent of one executable implementation.
 
-The module contract describes capability, not implementation details.
+It can originate from:
 
-### 5.5 Workflow
+- a paper
+- a laboratory SOP
+- a validated historical analysis
+- a newly designed method
 
-Represents a versioned DAG/composition of Modules.
+### 6.5 Module
 
-Workflow definitions may be provided by:
-- Nextflow
-- Snakemake
-- Galaxy
-- CWL/WDL-compatible upstream systems
-- a lightweight BioHarness orchestration definition when no external engine is required
+A typed reusable computational capability.
 
-BioHarness must not become another general-purpose workflow language unless a future requirement proves unavoidable.
+A Module contract describes:
 
-### 5.6 Run
-
-Represents one immutable execution of a module or workflow.
-
-A Run freezes:
-- workflow/module revision
-- input dataset versions
-- parameters
-- resolved policy/context
-- runtime environment
-- model versions
-- compute backend
-- user/agent identity
-- code commit/container digest where applicable
-- timestamps and execution state
-
-### 5.7 Artifact
-
-Represents any produced output.
-
-Examples:
-- BAM
-- VCF
-- DEG table
-- MotifSet
-- network
-- tree
-- embedding
-- figure
-- HTML report
-- model
-
-Artifacts are versioned/immutable and may be promoted to higher trust states.
-
-### 5.8 Decision
-
-Represents scientific or operational choices that should remain inspectable.
-
-Examples:
-- why one genome became canonical
-- why one parameter set became the default
-- why one workflow was chosen over alternatives
-- why a candidate result was promoted
-- why a sample was excluded
-
-Decision is intentionally first-class because reproducibility requires preserving rationale, not only commands.
-
-### 5.9 Resource
-
-Represents reusable infrastructure or external capability.
-
-Resource subtypes include:
-- reference resource
-- software/tool
+- inputs/outputs
+- software/provider/version
 - runtime/environment
-- model
-- external database
-- API/MCP endpoint
-- compute node/cluster
+- parameters and explanations
+- purpose/rationale
+- references
+- QC criteria
+- interpretation guidance
+- failure modes
 
-## 6. Species-Centered and Project-Centered Axes
+The provider can be CLI, Python/R, container, REST, MCP, RPC, TBtools, or another external service.
 
-BioHarness uses a two-axis model.
+### 6.6 Workflow
 
-### Species Hub
+An executable composition of Modules. BioHarness records and governs workflows but should prefer mature workflow engines rather than create another general-purpose DSL.
 
-Stores long-lived shared assets:
-- reference genomes
-- annotations
-- proteomes
-- gene-ID namespaces/mappings
-- functional annotations
-- orthology
-- expression atlases
-- variants
-- phenotypes
-- structures
-- tracks
+### 6.7 Experiment
 
-### Project Workspace
+A structured comparison of Runs, software, workflows, parameters, environments, or models.
 
-Stores research context:
-- project-specific dataset selections
-- project policies
-- analysis runs
-- experimental comparisons
-- decisions
-- reports
-- candidate/validated results
+Experiment stores:
 
-Projects reference Species assets; they do not duplicate canonical files unnecessarily.
+- baseline
+- variables/search space
+- candidates
+- metrics
+- constraints
+- validation data
+- outcome
+- resulting Decision
 
-## 7. Registries
+### 6.8 Run
 
-BioHarness uses registries instead of implicit filesystem conventions.
+An immutable execution record containing exact inputs, workflow/module versions, parameters, resolved context/policy, runtime, model versions, compute backend, actor, and timestamps.
 
-### 7.1 Dataset Registry
+### 6.9 Artifact
 
-Stable logical IDs resolve to one or more physical locations.
+An immutable output or registered scientific result.
+
+Examples include tables, BAM/VCF, motif sets, trees, networks, structures, embeddings, reports, figures, and models.
+
+### 6.10 Decision
+
+A first-class explanation of why a scientific or operational choice was made.
+
+Examples:
+
+- selecting one parameter set
+- excluding a sample
+- accepting a reproduced workflow
+- promoting one result over another
+- changing a workflow default
+- superseding a previous policy
+
+### 6.11 ResearchMemory
+
+A time-aware, scoped, evidence-backed memory derived from research activity.
+
+Memory is not authoritative merely because it was generated by an LLM.
+
+## 7. Research Context Compiler
+
+The Context Compiler is a central BioHarness component.
+
+A task should not be handled by simply retrieving the top-N vector memories and appending them to an LLM prompt.
+
+Instead:
+
+```text
+User/Agent Request
+      +
+Project Scope
+      +
+Data Provider State
+      +
+Applicable Policies
+      +
+Workflow/Module Registry
+      +
+Relevant Memories
+      +
+Previous Decisions/Failures
+      |
+      v
+Context Compiler
+      |
+      v
+Resolved ResearchContext Snapshot
+```
+
+The compiled snapshot must distinguish:
+
+- authoritative data
+- mandatory policy
+- validated memory
+- provisional observation
+- agent inference
+- stale/superseded knowledge
+
+This makes later audits possible: a Run can be evaluated against the exact context available at execution time.
+
+## 8. Policy Engine
+
+Policy resolution follows scoped inheritance, for example:
+
+```text
+Lab Policy
+   -> User/Role Policy
+      -> Project Policy
+         -> Species/Data Policy (when relevant)
+            -> Workflow Policy
+               -> Run Override
+```
+
+The exact hierarchy may evolve, but resolution must be deterministic and frozen for governed Runs.
+
+A policy change affects future Runs; it does not rewrite historical Run context.
+
+Memory and Policy remain separate concepts:
+
+- Memory says what has been observed/learned.
+- Policy says what must/should happen.
+- Decision explains why a memory or evidence set caused a policy/default to change.
+
+## 9. Research Memory Plane
+
+The memory subsystem is a logical plane, not necessarily one database product.
+
+### 9.1 Memory scopes
+
+At minimum:
+
+- User Memory
+- Project Memory
+- Method/Workflow Memory
+- Lab/Shared Memory
+
+Scopes must remain explicit. A user's preference should not silently become laboratory policy, and a project-specific exception should not become a global default.
+
+### 9.2 Memory types
+
+Recommended semantic types:
+
+- Observation
+- Failure/Lesson
+- Finding
+- Preference
+- Procedure Hint
+- Software/Version Note
+- Decision Summary
+- Hypothesis
+- Literature-derived Knowledge
+- Validated Scientific Finding
+
+Types drive lifecycle, confidence, and retrieval behavior.
+
+### 9.3 Evidence grounding
+
+A scientific memory should be able to reference one or more evidence objects:
+
+```text
+ResearchMemory
+   -> Run
+   -> Artifact
+   -> Experiment
+   -> Paper/Reference
+   -> Decision
+   -> Policy Event
+```
 
 Example:
 
-```text
-poptr/genome/v4.1
-   -> s3://bioharness/species/poptr/genome/v4.1.fa.gz
-```
-
-Workflows reference logical IDs rather than `/data3/...` paths.
-
-### 7.2 Module Registry
-
-Records capability metadata:
-- identifier
-- version
-- provider
-- input/output types
-- parameter schema
-- runtime requirements
-- references
-- validation hooks
-- documentation/rationale
-
-### 7.3 Workflow Registry
-
-Records:
-- workflow ID and version
-- source repository
-- revision/tag/commit
-- engine
-- input/output contracts
-- parameter schema
-- reference publication if relevant
-- validation status
-
-### 7.4 Resource Registry
-
-Tracks reusable environments, tools, models, references, APIs, MCP servers, and compute infrastructure.
-
-### 7.5 Presentation Registry
-
-Optional registry describing how artifact types may be rendered.
-
-Examples:
-- ExpressionMatrix -> heatmap/PCA/expression viewer
-- VariantSet -> table/genome track
-- Network -> graph viewer
-- Tree -> phylogeny viewer
-- MotifSet -> motif/logo/evolution viewer
-
-This avoids hard-wiring every scientific type into frontend code.
-
-## 8. Ports and Adapters
-
-Core business logic uses ports. External systems implement adapters.
-
-### 8.1 Tool Port
-
-Conceptual operations:
-- describe capability
-- health/version
-- validate request
-- execute/invoke
-- collect result metadata
-
-Adapters may include:
-- MCPAdapter
-- RESTAdapter
-- CLIAdapter
-- TBtoolsRPCAdapter
-- PythonAdapter
-- RAdapter
-
-### 8.2 Workflow Port
-
-Adapters:
-- NextflowAdapter
-- SnakemakeAdapter
-- GalaxyAdapter
-
-### 8.3 Compute Port
-
-Adapters:
-- LocalRunner
-- DockerRunner
-- ApptainerRunner
-- SSHRunner
-- SlurmRunner
-
-### 8.4 Storage Port
-
-Adapters:
-- LocalFilesystem
-- S3/MinIO
-- PostgreSQL metadata
-- optional graph/vector stores when justified by real use cases
-
-The initial system should not require every adapter to exist.
-
-## 9. Module Contract
-
-A module is a typed capability declaration, not an arbitrary script path.
-
-Illustrative manifest:
-
 ```yaml
-id: transcriptomics.deseq2
-version: 1.0.0
-
-inputs:
-  counts:
-    type: ExpressionCounts
-  samples:
-    type: SampleSheet
-
-outputs:
-  deg:
-    type: DifferentialExpressionTable
-  qc:
-    type: QCReport
-
-parameters:
-  design:
-    type: string
-    required: true
-  alpha:
-    type: number
-    default: 0.05
-
-provider:
-  kind: container
-  image: example/deseq2@sha256:...
-
-resources:
-  cpu: 4
-  memory: 16Gi
-
-knowledge:
-  purpose: Differential expression analysis from count matrices
-  references: []
-  parameter_notes: {}
-  interpretation_notes: {}
+kind: FailureLesson
+scope: project:poplar-rnaseq
+statement: Parameter X consistently reduced unique mapping rate.
+evidence:
+  - run:183
+  - run:187
+  - artifact:qc-821
+confidence: validated
 ```
 
-The knowledge section is important for teaching and transparent AI use. A beginner should be able to inspect what a module does and why.
+### 9.4 Temporal model
 
-## 10. Analysis Lifecycle
+Memory must carry explicit time semantics. At minimum:
 
-The platform recognizes five research behaviors.
+- observed_at
+- recorded_at
+- valid_from
+- valid_to (optional)
+- updated_at
+- superseded_at (optional)
 
-### Explore
+A future implementation may adopt bi-temporal semantics more formally.
 
-Free-form or semi-structured exploratory analysis.
+### 9.5 Memory lifecycle
 
-Outputs are EXPERIMENTAL by default.
+Do not use a single generic exponential decay for all scientific memory.
 
-### Reproduce
-
-Reconstruct a published or external method using publication, supplementary material, code, environment, reference data, expected outputs, and validation checks.
-
-Once verified, the reconstructed method becomes a reusable lab workflow.
-
-### Build
-
-Develop a new lab module/workflow.
-
-New methods must declare inputs, outputs, runtime, parameters, provenance requirements, and validation rules before becoming reusable shared assets.
-
-### Optimize
-
-Treat parameter/software comparisons as explicit experiments.
-
-An optimization experiment stores:
-- baseline
-- candidate runs
-- metrics
-- constraints
-- selection criteria
-- final Decision
-
-### Publish/Promote
-
-Validated outputs may become shared/canonical laboratory results.
-
-## 11. Run State Machine
-
-Execution state and scientific trust state are separate.
-
-### Execution state
+Recommended lifecycle states:
 
 ```text
-DRAFT
-  -> QUEUED
-  -> RUNNING
-  -> COLLECTING
-  -> VALIDATING
-  -> SUCCEEDED
-
-Failures may produce:
-FAILED
-CANCELLED
+ACTIVE
+STALE
+SUPERSEDED
+CONTRADICTED
+ARCHIVED
+RETRACTED
+DELETED
 ```
 
-### Artifact trust state
+Forgetting is type-aware:
+
+- scratch observations decay quickly
+- unvalidated agent inference decays quickly
+- version-specific software hints become stale when versions change
+- repeated failure lessons persist longer
+- validated findings do not automatically decay because of age alone
+- policies remain active until superseded/retracted
+
+### 9.6 Memory promotion
+
+Research experience becomes institutional knowledge through an explicit path:
 
 ```text
-EXPERIMENTAL
+Observation
+   -> Memory Candidate
+   -> supporting evidence / Experiment
+   -> Validated Memory
+   -> Decision
+   -> Workflow preset / Rule / Policy
+```
+
+This transition is one of the defining BioHarness behaviors. Retrieval should not directly mutate scientific defaults.
+
+## 10. Research Memory Graph
+
+The graph is not merely an entity relationship graph for conversational memory.
+
+Its important edges describe the research process:
+
+```text
+Paper
+  -> implemented_by -> Recipe/Workflow
+Workflow
+  -> executed_as -> Run
+Run
+  -> produced -> Artifact
+Artifact
+  -> supports -> Finding/Memory
+Memory
+  -> motivates -> Decision
+Decision
+  -> changes/promotes -> Policy/Preset
+Policy
+  -> constrains -> Future Run
+```
+
+Other useful edges include:
+
+- derived_from
+- contradicted_by
+- supersedes
+- validates
+- invalidates
+- compared_with
+- selected_over
+- reproduced_by
+- failed_under
+
+The first implementation does not require a dedicated graph database. PostgreSQL plus explicit edge tables and vector indexing are acceptable until real multi-hop workloads justify a graph engine.
+
+## 11. Memory -> Policy -> Execution -> Evidence -> Memory Loop
+
+This loop is the architectural center of BioHarness:
+
+```text
+Research Memory
+      |
+      v
+Policy / Context
+      |
+      v
+Recipe / Workflow
+      |
+      v
+Run
+      |
+      v
+Artifact / QC
+      |
+      v
+Validation / Decision
+      |
+      +-------> Research Memory
+```
+
+The purpose is not to make an agent "remember more". It is to allow validated experience to change future scientific behavior while preserving evidence and auditability.
+
+## 12. Analysis Modes for Agents and Humans
+
+### Explore Mode
+
+Free-form scratch work using shell/Python/R/notebooks when needed.
+
+Outputs are SCRATCH and non-authoritative.
+
+### Governed Analysis Mode
+
+Runs registered Modules/Workflows under resolved Context and Policy. Produces immutable Run/Artifact records.
+
+### Build Mode
+
+Used to reproduce papers, develop new Modules/Workflows, compare implementations, or optimize parameters. Produces drafts/Experiments that require validation before promotion.
+
+## 13. Scientific Lifecycle
+
+### Analysis lifecycle
+
+```text
+Explore -> Reproduce/Build -> Validate -> Reuse -> Optimize -> Promote
+```
+
+### Artifact trust lifecycle
+
+```text
+SCRATCH
+   -> EXPERIMENTAL
    -> CANDIDATE
    -> VALIDATED
    -> CANONICAL
 ```
 
-Promotion should create an auditable Decision and update a pointer. It must not rewrite history.
-
-## 12. Canonical Pointer Model
-
-Example:
+### Execution lifecycle
 
 ```text
-Species: Populus trichocarpa
-Resource: reference-genome
-
-canonical -> dataset:poptr-genome-v4.1
+DRAFT -> QUEUED -> RUNNING -> COLLECTING -> VALIDATING -> SUCCEEDED
+                                  |                         |
+                                  +-> FAILED/CANCELLED <----+
 ```
 
-Later:
+Execution success and scientific validity are independent.
 
-```text
-canonical -> dataset:poptr-genome-v5.0
+## 14. Module Contract: Transparency over Black Boxes
+
+BioHarness must make analysis understandable to beginners and auditable by experts.
+
+A Module contract should expose:
+
+```yaml
+id: transcriptomics.example
+version: 1.0.0
+
+purpose: ...
+rationale: ...
+references: [...]
+
+inputs: {...}
+outputs: {...}
+
+software:
+  provider: ...
+  version: ...
+
+environment: ...
+
+parameters:
+  parameter_a:
+    default: ...
+    explanation: ...
+    constraints: ...
+
+qc:
+  metrics: [...]
+  acceptance: ...
+
+interpretation:
+  expected_outputs: ...
+  limitations: ...
+  common_failures: ...
 ```
 
-v4.1 remains retrievable for reproducibility of historical projects.
+A user should be able to answer from the module definition:
 
-The same model applies to:
-- species references
-- workflow defaults
-- validated analysis outputs
-- project reports
-- expression atlases
-- parameter presets
+- what is happening
+- why this tool is used
+- what data are consumed
+- what parameters mean
+- what result is produced
+- how quality is checked
+- what limitations apply
 
-## 13. Provenance Graph
+## 15. Recipe -> Workflow -> Run Separation
 
-Every official result should be traversable backward.
+BioHarness separates scientific rationale from executable implementation.
 
-```text
-Artifact
-  <- Run
-      <- Workflow/Module revision
-      <- Parameters
-      <- Runtime Environment
-      <- Model revision
-      <- Input Datasets
-      <- Resolved Policies
-      <- User/Agent
-```
+### Recipe
 
-The schema should remain compatible with established lineage/research-object approaches rather than inventing a completely isolated vocabulary.
+Scientific purpose, assumptions, references, rationale, validation expectations.
 
-## 14. Reuse and Content-Addressed Execution
+### Workflow
 
-BioHarness should compute a reproducibility signature from stable inputs such as:
+Executable implementation/DAG, versioned and tied to providers.
 
-```text
-RunSignature = hash(
-  module/workflow revision
-  + input artifact hashes
-  + normalized parameters
-  + runtime/container digest
-  + relevant model revisions
-)
-```
+### Run
 
-If an identical successful run already exists, BioHarness can offer reuse instead of recomputation.
+One exact execution against concrete data under a concrete context.
 
-This mechanism should initially be advisory. Automatic reuse can be enabled only after validation proves signatures sufficiently complete.
+This is especially important for paper reproduction: one paper-derived Recipe may have multiple implementation variants before a validated laboratory Workflow is selected.
 
-## 15. Policy and Context Inheritance
+## 16. External Providers and Adapters
 
-Policies are hierarchical.
+BioHarness should define ports, not special cases.
 
-```text
-Lab Policy
-   -> Species Policy
-      -> Project Policy
-         -> Workflow Policy
-            -> Run Overrides
-```
+### Data providers
 
-The resolved context is frozen into each official Run.
+- Genome-web API
+- PostgreSQL-backed stores
+- object/filesystem stores
+- external biological services
 
-Example:
+### Workflow providers
 
-```text
-Lab:
-  raw data immutable
-  official outputs require provenance
+- Nextflow
+- Snakemake
+- Galaxy where appropriate
 
-Species:
-  canonical genome = poptr-v4.1
+### Tool providers
 
-Project:
-  exclude sample X23
-  batch variable = project
+- MCP
+- REST API
+- RPC
+- CLI
+- Python/R
+- containers
+- TBtools
+- lab-developed tools such as EvoPM
 
-Workflow:
-  minimum replicates = 3
-  FDR threshold = 0.05
-```
+### Compute providers
 
-This architecture replaces one oversized global agent instruction file with scoped, composable policy.
+- SSH
+- Slurm
+- containers/Apptainer
+- server-specific runners
 
-## 16. Agent Governance
+### Memory providers
 
-AI agents are clients of BioHarness, not alternative sources of truth.
+- PostgreSQL/pgvector
+- Qdrant
+- TiMEM-like temporal memory provider
+- future graph engines such as Graphiti/Neo4j when justified
 
-### Read path
+Provider choice must remain replaceable behind BioHarness semantics.
 
-Low-risk actions:
-- search datasets
-- inspect metadata
-- inspect workflows
-- view results
-- summarize provenance
+## 17. Genome-web Integration
 
-These may execute directly.
+Current Genome-web is an existing asset, not something to rebuild inside BioHarness.
 
-### Governed write path
+### Genome-web backend
 
-State-changing actions:
-- register dataset
-- create or modify shared workflow
-- launch official run
-- change canonical resource
-- promote artifact
-- publish shared result
+Acts as the first biological Data Provider and continues to own genome-centric source data/query logic.
 
-These pass through validation, authorization, and audit rules.
+### Existing Genome-web pipelines
 
-### Scratch analysis
+Existing scripts/Nextflow pilot can be wrapped and registered as legacy Workflow/Module providers. They should not be copied into BioHarness merely for ownership.
 
-Agents may use a scratch workspace for exploratory code and ad hoc analysis. Scratch outputs are not shared/canonical until explicitly registered and promoted.
+### Existing Genome-web MCP/API work
 
-This preserves the productivity of coding agents without turning the shell into the laboratory's source of truth.
+The current principle that AI uses controlled APIs rather than direct database access should be retained. Genome-specific MCP tools can remain a provider-facing capability layer beneath BioHarness.
 
-## 17. Frontend Read Architecture
+## 18. Web Architecture
 
-The frontend consumes read models produced by the control plane.
+Web is a client/workbench only.
 
-It should not parse raw scientific work directories.
+The current Genome-web professional biological components should be reused where useful, but the shell/navigation should evolve to expose both source data and BioHarness analysis state.
 
-Initial top-level navigation:
+Recommended top-level concepts:
 
-- Species
+- Species / Data
 - Projects
-- Data
-- Workflows
-- Analyses
+- Methods
+- Runs
 - Results
-- Ask / Agent
+- Agent
 
-Default views show canonical/validated outputs. Historical, candidate, and experimental outputs are available through advanced/history views.
+The Web should obtain workflow steps, statuses, artifacts, provenance, available actions, and presentation hints from backend APIs rather than hard-code scientific workflows.
 
-### Contextual capabilities
+A scientific result page should prioritize interpretation and trust state, with raw files/provenance available as deeper views.
 
-Tools should be discovered from object type rather than exposed as a giant flat menu.
+## 19. Harness State Store
 
-Example:
+BioHarness requires its own logical state even when scientific data live elsewhere.
 
-```text
-ExpressionMatrix
-  -> PCA
-  -> DEG
-  -> WGCNA
-  -> clustering
-  -> visualization
-```
+Authoritative Harness state includes:
 
-### CQRS-lite
+- Project
+- Context Snapshot
+- Policy
+- Recipe
+- Module/Workflow registry metadata
+- Experiment
+- Run
+- Artifact metadata
+- Validation
+- Decision
+- Research Memory
+- Provenance edges
 
-Write-side scientific state may remain normalized and provenance-rich.
+Physical deployment can initially use the same PostgreSQL server as other services, but Harness state should remain logically separable (for example, a dedicated schema/database boundary).
 
-Read-side presentation models can be denormalized/materialized for efficient frontend use.
+## 20. Source-of-Truth Rules
 
-Example read models:
-- species_summary
-- project_summary
-- canonical_resource
-- published_analysis
-- published_gene
-- published_expression
-- published_network
-- published_motif
+### Data Provider
 
-## 18. Storage Responsibilities
-
-### PostgreSQL
-
-Use for:
-- domain metadata
-- relationships
-- policies
-- run/job state
-- provenance indexes
-- decisions
-- registry metadata
-
-### S3/MinIO or compatible object storage
-
-Use for:
-- FASTQ
-- BAM/CRAM
-- VCF
-- BigWig
-- structures
-- reports
-- large binary outputs
-
-### Scientific matrix formats
-
-Prefer domain-appropriate formats such as:
-- Parquet
-- Zarr
-- HDF5/h5ad
-
-Do not put large matrix/file payloads into relational tables without a specific reason.
-
-### Optional stores
-
-Graph/vector/search databases should be adapters added only when a demonstrated workload benefits from them.
-
-## 19. External Capabilities to Reuse
-
-BioHarness should prefer integration over reimplementation.
-
-Candidate providers include:
-
-- nf-core / Nextflow for standard pipelines
-- Snakemake for custom research workflows
-- Galaxy when interactive history/workflow functionality is useful
-- TBtools through RPC/API where capabilities are exposed
-- BioContainers/OCI images for reproducible runtimes
-- IGV/JBrowse for genomic visualization
-- Cytoscape-compatible approaches for networks
-- existing model registries/weights rather than local duplicated model copies
-- external databases/APIs via adapters
-- MCP servers for agent-facing tool integration
-
-Lab-developed scientific software such as EvoPM remains in its own repository and is registered as a versioned provider/module.
-
-## 20. Lessons Adopted from Existing Biological Systems
-
-### PlantMDCS
-
-Adopt:
-- species/multi-omics database orientation
-- browser presentation
-- decoupling of database management and user-facing analysis
-- low-friction access
-
-Do not adopt as a core constraint:
-- tight coupling between the platform and every built-in scientific function
-
-### TBtools
-
-Adopt:
-- biological usability
-- practical tool coverage
-- low learning barrier
-- RPC/API/plugin direction where available
-
-Do not reproduce:
-- mature scientific tools already provided by TBtools
-
-### FlowKit
-
-Adopt:
-- explicit task lifecycle
-- read-only versus state-changing routing
-- evidence-backed review
-- validation gates
-- context/policy discipline
-
-Translate these concepts into scientific governance rather than copying its coding-agent workflow literally.
-
-### Reproducible research software patterns
-
-The 2026 Schultz et al. chromosome-evolution study is representative of modern computational biology: multiple purpose-specific tools and repositories are coordinated through reproducible workflows rather than merged into one giant executable. BioHarness should make such ecosystems easier to register, reproduce, inspect, and reuse instead of forcing them into one codebase.
-
-## 21. Source-of-Truth Boundaries
+Authoritative for source scientific datasets and domain-specific biological records.
 
 ### Git
 
-Authoritative for:
-- workflow/module definitions
-- scripts
-- manifests
-- policy definitions intended for code review
-- documentation
-- architecture decisions
+Authoritative for versioned workflow/module definitions, code, reviewed policies/configuration, and architecture documentation where appropriate.
 
-### Database
+### Harness State Store
 
-Authoritative for:
-- Species/Dataset/Project metadata
-- Run state
-- Artifact metadata
-- promotion state
-- Decisions
-- registry indexes
+Authoritative for Runs, Artifacts, decisions, resolved contexts, memory state, validation, promotion, and indexes.
 
-### Object storage
+### Object/File Storage
 
-Authoritative for:
-- large immutable file content
+Authoritative for immutable large artifacts and workflow outputs.
 
-### AI memory / summaries
+### AI memory/model context
 
-Non-authoritative convenience layer only.
+Never an authoritative source by itself.
 
-## 22. Repository Strategy
+## 21. Reuse over Reinvention
 
-Initial development uses one repository:
+BioHarness should directly borrow or adapt mature systems where they already solve the lower-level problem.
 
-```text
-BioHarness/
-```
+Examples include:
 
-The control plane remains a modular monolith.
+- FlowKit: execution discipline, staged planning/verification, read-vs-write governance, state handoff, experience loops
+- TiMEM: temporal-hierarchical memory organization and consolidation concepts
+- Nextflow/nf-core: workflow execution and standard pipelines
+- Snakemake: research workflow execution
+- OpenLineage: lineage event vocabulary/patterns
+- RO-Crate: portable research object/export concepts
+- GA4GH DRS/TRS/TES: data/tool/execution abstraction ideas
+- Galaxy: transparent interactive history and workflow promotion
+- WorkflowHub/Dockstore: workflow registry and metadata practices
+- MCP: agent-facing tool/resource protocol
+- TBtools: mature biological tooling and possible RPC/API provider
+- Genome-web: internal biological Data Provider and reusable presentation components
 
-Scientific tools with independent identity remain in their existing repositories.
+Detailed references and adoption notes live in `docs/architecture/reference-architectures.md`.
 
-A future split may introduce a second private laboratory configuration repository if needed:
+## 22. What BioHarness Owns
 
-```text
-BioHarness       # platform
-BioHarness-Lab   # private lab configuration/policies/resource bindings
-```
+BioHarness should own only the semantics that bind scientific work together:
 
-Do not split frontend/backend/agent/registry into independent repositories at the beginning.
+1. Research Context compilation
+2. Policy resolution
+3. transparent Module/Recipe contracts
+4. governed Run lifecycle
+5. Artifact trust/promotion
+6. Decision records
+7. evidence-backed Research Memory semantics
+8. Memory lifecycle and promotion
+9. Memory <-> Policy feedback
+10. Memory/Policy/Context -> future execution loop
 
-## 23. Intended Repository Boundaries
+Everything else should preferentially be reused behind adapters.
 
-The implementation may evolve, but the expected top-level organization is:
+## 23. Distinctive Research Direction
 
-```text
-apps/
-  web/
-  api/
+The engineering product is useful even without claiming academic novelty.
 
-core/
-  species/
-  datasets/
-  projects/
-  modules/
-  workflows/
-  runs/
-  artifacts/
-  decisions/
-  resources/
-  policies/
+If BioHarness is later developed into a research contribution, the strongest candidate is not "we added memory". It is the formalization and evaluation of:
 
-adapters/
-  tools/
-  workflow/
-  compute/
-  storage/
+**Evidence-grounded scientific memory + research context compilation + memory-to-policy feedback + governed execution.**
 
-registry/
-  modules/
-  workflows/
-  resources/
-  schemas/
+A meaningful benchmark would compare ordinary agents, semantic/vector-memory agents, temporal-memory agents, and BioHarness-style research memory on outcomes such as:
 
-policies/
-  lab/
-  species/
-  project-templates/
+- paper workflow reproduction success
+- repeated-error rate
+- policy violation rate
+- stale-knowledge misuse
+- provenance completeness
+- cross-session task success
+- context/token cost
+- workflow reuse rate
+- result traceability
 
-docs/
-  architecture/
-  decisions/
-  contracts/
-  plans/
+This remains a research hypothesis until empirically tested.
 
-tests/
-infra/
-```
+## 24. V1 Focus
 
-This is a logical boundary proposal, not a mandate to create every empty directory immediately.
+V1 should not attempt to solve every analysis domain.
 
-## 24. Deliberate Non-Goals for V1
-
-BioHarness V1 should not attempt to:
-
-- replace Nextflow/Snakemake
-- replace TBtools/Galaxy
-- implement Kubernetes-like distributed infrastructure
-- build a general LIMS
-- implement every omics analysis
-- create a universal ontology for all biology
-- require Neo4j/vector DB/Kubernetes
-- automatically trust AI-generated analysis
-- expose every experimental run on the public-facing UI
-- solve authentication/authorization for external multi-tenant deployment
-
-The first release is an internal laboratory platform.
-
-## 25. Recommended V1 Vertical Slice
-
-The first implementation should prove the architecture with one species, one shared dataset family, one standard workflow, and one lab-specific workflow.
-
-Suggested slice:
+The architecture should first prove one complete vertical loop:
 
 ```text
-Species: Populus trichocarpa
-
-Shared resources:
-  canonical genome
-  annotation
-  proteome
-
-Standard workflow:
-  RNA-seq or a smaller expression analysis workflow
-
-Lab workflow:
-  EvoPM or another existing laboratory analysis
-
-Required capabilities:
-  Dataset registry
-  Resource registry
-  Module/workflow registry
-  Run lifecycle
-  Artifact ingestion
-  provenance
-  canonical pointer
-  basic species/project frontend read model
+Data Provider reference
+    -> Context + Policy
+    -> Recipe/Workflow
+    -> governed Run
+    -> Artifact/QC
+    -> Decision
+    -> Research Memory
+    -> effect on a later Run
 ```
 
-Success means both workflows can be registered and executed through the same control-plane abstractions without embedding their scientific internals into the core.
+The V1 implementation should reuse existing Genome-web data and at least one existing workflow/provider rather than create synthetic infrastructure.
+
+## 25. Explicit Non-Goals for V1
+
+Do not initially:
+
+- rebuild Genome-web database models
+- rebuild Nextflow/Snakemake
+- implement a custom graph database
+- implement a custom vector database
+- clone TiMEM memory internals
+- clone FlowKit's complete coding workflow
+- build a universal biological ontology
+- make Web mandatory for operation
+- allow unrestricted agents to write shared/canonical state
+- automatically promote remembered observations into policy
+- require Kubernetes/microservices
 
 ## 26. Architecture Acceptance Criteria
 
-The architecture is considered successfully implemented when the following statements are true:
+The architecture is successful when:
 
-1. A new tool can be added through an adapter/manifest without modifying unrelated core domains.
-2. A new workflow can consume registered datasets by logical ID and produce registered artifacts.
-3. Every official artifact can be traced to exact inputs, parameters, workflow/module version, environment, and executor.
-4. Re-running an analysis creates a new immutable Run rather than overwriting the prior result.
-5. A validated result can be promoted to canonical without deleting prior versions.
-6. The frontend can present canonical scientific results without understanding raw workflow output layout.
-7. An agent can discover datasets/workflows and launch governed runs without direct database or uncontrolled filesystem manipulation.
-8. Project/species/lab policies resolve deterministically and the resolved context is frozen with the Run.
-9. Existing software can be connected through MCP/API/RPC/CLI instead of being reimplemented.
-10. A laboratory member can determine which result is official and why it was selected.
+1. A user or agent can perform a complete governed analysis without Web.
+2. Genome-web data can be consumed through a provider reference without duplicating its scientific schema.
+3. A new tool can be registered via adapter/manifest without changing unrelated core logic.
+4. A Module explains purpose, inputs, outputs, software, parameters, QC, and interpretation.
+5. Every official Artifact is traceable to Run, context, policy, software/environment, and input data references.
+6. Research memories carry scope, time, status, provenance/evidence, and confidence/trust metadata.
+7. Superseded/contradicted knowledge can be retained without remaining active.
+8. A validated memory can lead to a Decision and then an explicit workflow/policy change.
+9. Historical Runs retain the exact context/policy snapshot used at execution time.
+10. The frontend can be replaced without changing research semantics.
 
-## 27. Open Questions Requiring Design Approval Before Implementation
+## 27. Immediate Documentation/Design Follow-up
 
-The architecture intentionally leaves the following implementation decisions open until the V1 slice is confirmed:
+Before implementation planning, review and lock:
 
-- primary backend language/framework
-- frontend framework
-- exact registry manifest schema
-- whether workflow definitions live fully in Git or are mirrored into the database
-- local filesystem versus MinIO for the first deployment
-- exact scheduler/queue implementation for V1
-- authentication model for an internal network
-- how much existing server inventory should be integrated initially
-- first standard workflow used as the architecture test
-- first lab-specific workflow used as the architecture test
+- Context schema
+- Policy precedence/conflict semantics
+- Recipe/Module/Workflow contracts
+- ResearchMemory schema and lifecycle
+- Memory evidence/graph edge vocabulary
+- Decision/promotion gates
+- provider adapter contracts
+- first V1 end-to-end scenario
 
-These are implementation choices within the framework and should not change the invariants above.
+Once this design is approved, implementation planning should proceed in small vertical slices rather than constructing all subsystems at once.
