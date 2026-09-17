@@ -95,7 +95,7 @@ The Genome-web TF case follows four hard rules:
 
 1. `validate_genomes.py`, `run.sh`, `run.py`, the Nextflow pipeline, MAFFT, IQ-TREE, and Genome-web schemas remain owned by Genome-web or their upstream projects.
 2. BioHarness does not vendor or copy those scripts into `src/bioharness`.
-3. The provider-specific adapter/configuration lives under a reference/example integration boundary and is not required to import or use BioHarness Core.
+3. The provider-specific adapter/configuration lives under a reference/example integration boundary. It may depend on BioHarness public port/contracts; BioHarness Core must never import or depend on the reference integration.
 4. Removing the Genome-web reference integration must leave the BioHarness package, migrations, generic unit tests, and generic contract/integration tests functional.
 
 The reference integration may translate BioHarness port contracts to external commands/files, but it cannot define Core semantics.
