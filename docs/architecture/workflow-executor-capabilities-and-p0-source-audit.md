@@ -1,15 +1,20 @@
-# BioHarness Workflow Executor Capabilities and P0 Source Audit
+# BioHarness P0 Workflow-Executor Source Audit — 2026-09-18
 
 Date: 2026-09-18
-Status: Source audit + focused architecture decision record
+Status: Source audit / non-authoritative rationale
 Runtime status: NOT_IMPLEMENTED
 Validation status: NOT_RUN
 
-## 1. Scope
+> This file records what was observed in the current Genome-web TF Nextflow pilot and why the P0 contract was narrowed. Final execution semantics are integrated into `scientific-contracts-and-run-semantics.md` and `p0-genome-web-tf-vertical-slice.md`. This audit does not override those files.
 
-This record audits the selected P0 provider against the actual current Genome-web TF Nextflow pilot rather than assuming a generic asynchronous workflow service.
+## 1. Sources Inspected
 
-Source files inspected on `mumu-140/genome-web-backend/main`:
+Repository: `mumu-140/genome-web-backend`
+Branch inspected: `main`
+Checked: 2026-09-18
+Inspection depth: repository code + workflow configuration + README
+
+Files inspected:
 
 - `pipeline/nextflow/run.sh`
 - `pipeline/nextflow/scripts/run.py`
@@ -18,52 +23,47 @@ Source files inspected on `mumu-140/genome-web-backend/main`:
 - `pipeline/nextflow/nextflow.config`
 - `pipeline/nextflow/README.md`
 
-The purpose is to make the P0 contract match what exists today and to prevent BioHarness from claiming capabilities that the provider does not expose.
+The audit goal was to compare the planned generic WorkflowExecutor abstraction with the provider that actually exists today.
 
-## 2. Observed Provider Behavior
+## 2. Observed Launcher Shape
 
-### 2.1 Launcher shape
+Current flow:
 
-`run.sh` loads the existing Genome-web environment/configuration and `exec`s the Python launcher.
+```text
+run.sh
+  -> source existing Genome-web config
+  -> exec Python run.py
+      -> validate args and paths
+      -> require Nextflow 25.10.4
+      -> fingerprint Python/Biopython, MAFFT, IQ-TREE, workflow sources
+      -> acquire RUN_ROOT/.launch.lock
+      -> create attempts/<attempt>
+      -> resolve/validate genomes manifest
+      -> write invocation.json
+      -> subprocess.run(nextflow ..., check=True)
+      -> require output/candidate/manifest.json
+```
 
-`run.py` then:
+This is a synchronous process launcher, not a generic server-style submit/poll API.
 
-1. validates explicit paths/parameters;
-2. requires Nextflow 25.10.4;
-3. fingerprints Python/Biopython, MAFFT, IQ-TREE, and workflow source files;
-4. creates a unique attempt directory;
-5. resolves/validates the genome manifest;
-6. writes `invocation.json`;
-7. invokes Nextflow synchronously with `subprocess.run(..., check=True)`;
-8. requires `output/candidate/manifest.json` after successful process exit.
+## 3. Observed Compute and Concurrency Behavior
 
-This is not currently a server-style submit/poll API.
-
-### 2.2 Compute backend
-
-The current `nextflow.config` fixes:
+Current `nextflow.config` fixes:
 
 ```text
 process.executor = local
 executor.cpus = 4
 executor.memory = 8 GB
+cache = deep
 ```
 
-Therefore the selected P0 currently exercises the WorkflowExecutor/provider boundary, not a remote Slurm/SSH/Kubernetes compute abstraction.
-
-### 2.3 Concurrency protection
-
-The launcher takes an exclusive non-blocking `fcntl` lock on:
+`run.py` takes a non-blocking exclusive filesystem lock on:
 
 ```text
 RUN_ROOT/.launch.lock
 ```
 
-for the duration of validation and the synchronous Nextflow execution.
-
-This serializes launches within one run root, but it is not a distributed idempotency service and does not establish global exactly-once submission.
-
-### 2.4 Attempt identity
+The lock serializes launches within one run root. It does not establish distributed idempotency or global exactly-once execution.
 
 Attempt directories are explicit and non-reusable:
 
@@ -71,294 +71,96 @@ Attempt directories are explicit and non-reusable:
 RUN_ROOT/attempts/<attempt>
 ```
 
-If the directory already exists, the launcher fails and requires a new attempt name.
+This maps naturally to BioHarness RunAttempt identity but is not itself a globally stable BioHarness identifier.
 
-This aligns naturally with BioHarness `RunAttempt` identity.
+## 4. Observed Resume Behavior
 
-### 2.5 Resume
-
-The launcher accepts:
+Launcher supports:
 
 ```text
 --resume
 --resume <session>
 ```
 
-The bare form passes Nextflow `-resume` (last session), whereas an explicit value passes `-resume <session>`.
+Bare `--resume` maps to Nextflow `-resume` using the current workspace's most recent session. An explicit session is therefore preferable for automated lineage when it can be captured reliably.
 
-For automated BioHarness recovery, explicit prior session identity is preferable to an implicit `last` selection whenever the provider exposes it reliably.
+Engine cache/reuse is valuable execution behavior but must not be treated as BioHarness scientific identity by itself.
 
-### 2.6 Provenance currently recorded
+## 5. Observed Provenance
 
-`invocation.json` records, among other fields:
+`invocation.json` records among other fields:
 
-- full command;
+- command;
 - Nextflow version;
 - MAFFT/IQ-TREE versions and executable fingerprints;
-- Python/Biopython identity and executable fingerprint;
-- source-file SHA256 values;
+- Python/Biopython identity and Python executable fingerprint;
+- SHA256 for relevant workflow/source files;
 - SHA256 of the original genomes manifest;
-- whether database collision checking used a provided snapshot or remained pending.
+- database-collision-check state.
 
-The resolved manifest itself is used for Nextflow input after paths are canonicalized.
+This is strong provider provenance for a pilot.
 
-### 2.7 Resolved input identity gap
+One gap remains for BioHarness-level identity: the launcher resolves/canonicalizes the manifest and scientific input paths but does not currently persist a BioHarness-owned digest of the resolved manifest plus all consumed member identities in the invocation record.
 
-`validate_genomes.py` resolves the six scientific input paths per genome to absolute files and validates metadata/ID consistency, but the current launcher does not persist a digest of `genomes.resolved.tsv` or all individual source-file contents in `invocation.json`.
+The adapter can add that provenance without rewriting provider scientific logic.
 
-Nextflow deep caching uses file content for execution/cache behavior, but BioHarness provenance should not rely on an internal cache key as its only historical input identity.
+## 6. Observed Validation Boundary
 
-### 2.8 Provider validation
+The workflow ends with BUNDLE assembly/verification, and the launcher requires `output/candidate/manifest.json` after successful Nextflow exit.
 
-The Nextflow workflow ends with `BUNDLE`, which assembles and verifies a whole-batch candidate. The launcher additionally requires the candidate manifest to exist.
+This provides useful provider-contract/artifact-integrity evidence.
 
-This is valuable provider-level validation evidence, but it should be registered with an explicit validation kind rather than described as universal scientific or publication validation.
+It does **not** by itself prove:
 
-## 3. WorkflowExecutorCapabilitySnapshot
+- full scientific interpretation;
+- publication readiness;
+- canonical acceptance;
+- BioHarness provenance completeness.
 
-BioHarness must let an execution/provider adapter declare what it can actually do.
+The authoritative contract therefore maps it into typed ValidationReports.
 
-Conceptual contract:
+## 7. Capability Conclusions
 
-```yaml
-workflow_executor_capabilities:
-  provider: genome-web-tf-nextflow-pilot
-  provider_revision: ...
-
-  submission:
-    mode: synchronous_process
-    native_idempotency_key: false
-    durable_external_execution_id: limited
-
-  observation:
-    poll: limited
-    reconcile_after_disconnect: limited
-    logs: true
-    trace: true
-
-  retry_resume:
-    engine_resume: true
-    explicit_resume_identity: supported_if_session_captured
-    internal_task_retry: nextflow_defined
-
-  cancellation:
-    supported: provider_specific
-
-  compute:
-    backend: local
-    remote_scheduler: false
-
-  provenance:
-    invocation_record: true
-    source_hashes: true
-    tool_fingerprints: true
-    resolved_manifest_digest: not_currently_emitted
-```
-
-The snapshot is tied to a provider revision; it is not a timeless claim about Nextflow itself.
-
-## 4. Capability-Driven Execution Rule
-
-BioHarness Core must not assume all WorkflowExecutors provide the same recovery guarantees.
-
-Required rule:
-
-> A provider adapter may advertise only capabilities demonstrated by its concrete integration. Missing capability is explicit state, not permission to invent an approximation silently.
-
-Examples:
-
-- if a provider has durable external IDs and lookup, BioHarness may automatically reconcile `UNKNOWN`;
-- if it lacks reliable lookup, `UNKNOWN` may require filesystem/process evidence or operator resolution;
-- if absence cannot be established safely, BioHarness must not auto-resubmit simply to make progress;
-- no provider may be described as exactly-once merely because BioHarness stores a submission key.
-
-## 5. Refined P0 Failure-Recovery Semantics
-
-The previous architecture correctly requires that lost acknowledgement must not cause blind duplicate execution.
-
-For this concrete P0, however, the implementation path is capability constrained.
-
-### Supported target behavior
-
-Before launch:
+For the inspected provider revision, a truthful capability snapshot should resemble:
 
 ```text
-RunAttempt exists
-submission intent recorded
-attempt/run-root identity fixed
+submission.mode               = synchronous_process
+compute.backend               = local
+native_idempotency_key        = false
+remote_scheduler              = false
+durable_external_execution_id = limited
+poll                          = limited
+reconcile_after_disconnect    = limited
+logs                          = true
+trace                         = true
+engine_resume                 = true
+explicit_resume_identity      = conditional on captured session
+source_hashes                 = true
+tool_fingerprints             = true
+resolved_manifest_digest      = adapter responsibility / not provider-emitted today
 ```
 
-During/after uncertain communication:
+These are claims about this concrete integration, not timeless claims about Nextflow.
 
-```text
-SUBMITTING/RUNNING -> UNKNOWN
-```
+## 8. Architectural Consequences Already Integrated
 
-Reconciliation may inspect provider-supported evidence such as:
+The source audit led to these final decisions:
 
-- attempt directory existence;
-- `invocation.json`;
-- Nextflow log/trace/session metadata;
-- candidate manifest;
-- launcher/run-root lock/process state when observable.
+1. WorkflowExecutor capabilities are revision-scoped and declared explicitly.
+2. Core does not fabricate exactly-once or async reconciliation guarantees.
+3. Uncertain execution may stop at `NEEDS_OPERATOR_RECONCILIATION`.
+4. Automated resume should prefer explicit prior session lineage when available.
+5. BioHarness records the resolved inputs actually consumed, not only the original manifest path.
+6. Provider BUNDLE/launcher PASS is typed validation evidence, not canonical scientific approval.
+7. P0 validates current local execution only; Slurm/SSH/Kubernetes are later slices.
 
-If the evidence cannot prove an outcome safely:
+Final normative wording is in the authoritative contract and P0 files, not here.
 
-```text
-UNKNOWN -> NEEDS_OPERATOR_RECONCILIATION
-```
-
-not:
-
-```text
-UNKNOWN -> blind automatic resubmit
-```
-
-P0 therefore tests **safe uncertainty handling**, not a false exactly-once guarantee.
-
-## 6. Explicit Resume Identity
-
-Automated recovery should prefer an explicit Nextflow session identifier over `-resume`/`last` where the previous session identity is available.
-
-Rationale:
-
-- `last` is contextual to the launch workspace;
-- a later unrelated/changed invocation could become the most recent session;
-- content caching may prevent incorrect recomputation, but cache safety is not the same as correct attempt/session lineage.
-
-P0 implementation planning should therefore include capture of the Nextflow session/run identifier in the provider execution record when feasible.
-
-If the provider cannot expose it reliably, that limitation must be recorded and automatic resume behavior narrowed accordingly.
-
-## 7. Resolved Manifest and Member Identity
-
-BioHarness should register the actual resolved input manifest used by the workflow, not only the user's original manifest file.
-
-P0 target provenance:
-
-```text
-original manifest identity
-    -> resolved manifest Artifact/digest
-        -> per-row ResolvedDataRefs
-            -> input file identities/digests or immutable provider revisions
-```
-
-At minimum, the RunSpec must be able to demonstrate that the biological data actually presented to Nextflow correspond to the recorded provider/input identity.
-
-The current Genome-web launcher does not need to be rewritten to own BioHarness semantics; the adapter can calculate/register additional identity information outside the provider.
-
-## 8. Validation Mapping
-
-Provider BUNDLE/launcher evidence maps to typed validation rather than one universal PASS.
-
-Illustrative mapping:
-
-```text
-provider_preflight          -> ValidationReport(kind=provider_contract)
-BUNDLE candidate verifier  -> ValidationReport(kind=artifact_integrity/provider_contract)
-BioHarness provenance check -> ValidationReport(kind=provenance_completeness)
-future scientific review   -> separate method/scientific validation kind
-future production release  -> separate publication_readiness profile
-```
-
-This prevents the launcher's message:
-
-```text
-PASS candidate=...
-```
-
-from being interpreted as “scientifically canonical and production-approved.”
-
-## 9. P0 Scope Correction
-
-The first P0 implementation should prove:
-
-- real Genome-web biological input resolution;
-- exact RunSpec identity;
-- one concrete local Nextflow WorkflowExecutor adapter;
-- RunAttempt separation;
-- provider capability snapshot;
-- candidate Artifact ingestion;
-- typed validation;
-- safe handling of failed/uncertain attempts;
-- explicit Decision/MemoryCandidate feedback;
-- no implicit production publication.
-
-It should **not** claim to validate yet:
-
-- Slurm execution;
-- SSH remote launch;
-- distributed locks;
-- Kubernetes;
-- generic WES/TES compatibility;
-- provider-native exactly-once idempotency;
-- all future Nextflow executor modes.
-
-Those can be later adapters/slices.
-
-## 10. P0 Source-Audit Acceptance Scenarios
-
-### P0-CAP-01 Capability honesty
-
-Status: `NOT_RUN`
-
-Expected:
-
-- current pilot advertises `compute.backend=local`;
-- no remote-scheduler capability is fabricated;
-- reconciliation/idempotency capability is marked according to implemented adapter evidence.
-
-### P0-CAP-02 Unknown state without reliable external lookup
-
-Status: `NOT_RUN`
-
-Expected:
-
-- uncertain launch state remains `UNKNOWN`/`NEEDS_OPERATOR_RECONCILIATION` when available evidence is insufficient;
-- no automatic duplicate submission occurs.
-
-### P0-RESUME-01 Explicit resume lineage
-
-Status: `NOT_RUN`
-
-Expected:
-
-- automated resume binds to the intended prior Nextflow session when explicit identity is available;
-- `last` is not used as an implicit scientific identity.
-
-### P0-PROV-01 Resolved manifest provenance
-
-Status: `NOT_RUN`
-
-Expected:
-
-- the exact resolved manifest used for execution is registered/digested;
-- member input identity is checkable independently of the original user manifest path.
-
-### P0-VAL-01 Provider PASS is typed
-
-Status: `NOT_RUN`
-
-Expected:
-
-- provider candidate verification produces typed validation evidence;
-- provider `PASS candidate=...` does not set canonical/publication status.
-
-## 11. New Invariants
-
-1. WorkflowExecutor behavior is capability-declared and revision-scoped.
-2. Unsupported recovery capability remains explicit; Core does not invent provider guarantees.
-3. P0 validates the current local Nextflow integration, not remote compute backends.
-4. Safe uncertainty is preferable to duplicate scientific computation when execution outcome cannot be established.
-5. Automated Nextflow resume should bind explicit session lineage when feasible.
-6. BioHarness provenance records the resolved inputs actually consumed, not only the pre-resolution user manifest.
-7. Provider candidate verification is typed validation evidence, not canonical scientific approval.
-
-## 12. Status
+## 9. Audit Status
 
 ```text
 source_audit = COMPLETED
-capability_contract = DESIGNED
+observations_integrated_into_authoritative_docs = DESIGNED
 adapter_implementation = NOT_IMPLEMENTED
-p0_source_audit_scenarios = NOT_RUN
+runtime_validation = NOT_RUN
 ```
