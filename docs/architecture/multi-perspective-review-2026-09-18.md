@@ -5,7 +5,7 @@ Status: Review record / non-authoritative rationale
 Runtime status: NOT_IMPLEMENTED
 Validation status: NOT_RUN
 
-> This file records how the review was performed and why the authoritative contracts were tightened. Final semantics are integrated into `scientific-contracts-and-run-semantics.md`, `p0-genome-web-tf-vertical-slice.md`, and `scenario-validation-plan.md`. This review never participates in precedence resolution.
+> This file records why the authoritative contracts were tightened. Final semantics live in `scientific-contracts-and-run-semantics.md`, `p0-genome-web-tf-vertical-slice.md`, and `scenario-validation-plan.md`. This review never participates in precedence resolution.
 
 ## Review Lenses
 
@@ -15,7 +15,7 @@ Validation status: NOT_RUN
 4. workflow execution/retry/recovery;
 5. data identity/provenance/reproducibility;
 6. security/authorization/governance;
-7. real laboratory use/evaluation;
+7. laboratory use/evaluation;
 8. documentation maintainability/YAGNI.
 
 ## Findings Retained for Audit
@@ -37,37 +37,23 @@ Validation status: NOT_RUN
 
 ## Central Design Retained
 
-The review did not reject:
-
-- headless Research Control Plane;
-- provider/adapter architecture;
-- Genome-web as first biological Data Provider;
-- external Nextflow/Snakemake workflows;
-- immutable historical evidence;
-- evidence-linked Research Memory;
-- separation of memory activation/maturity/scope;
-- deterministic mandatory context plus optional associative/graph recall;
-- dormancy rather than destructive forgetting;
-- no mandatory graph database in V1;
-- real-workflow-first vertical slicing.
+The review did not reject the headless Research Control Plane, provider/adapter architecture, Genome-web as the first Data Provider, external Nextflow/Snakemake workflows, immutable historical evidence, evidence-linked Research Memory, memory activation/maturity/scope separation, deterministic mandatory context plus optional associative/graph recall, dormancy rather than destructive forgetting, or real-workflow-first vertical slicing.
 
 ## Documentation Optimization
 
-During review, corrective rules initially accumulated as same-PR override layers. Because Git already preserves that history, the final optimization was:
+Because all corrections were still in one unmerged PR, same-PR ADR layering was unnecessary. The accepted optimization was:
 
 ```text
 review finding
     -> integrate final rule into authoritative contract
-    -> keep review file only as rationale/audit history
+    -> retain review only as rationale/audit history
 ```
-
-Future agents should read authoritative contracts first and this record only when the rationale is needed.
 
 ## Authority Mapping
 
 - scientific/run/execution contracts -> `scientific-contracts-and-run-semantics.md`;
 - first provider slice -> `p0-genome-web-tf-vertical-slice.md`;
-- executable acceptance scenarios -> `scenario-validation-plan.md`;
+- executable scenarios -> `scenario-validation-plan.md`;
 - memory semantics -> existing memory architecture records;
 - evidence -> `evidence-register-2026-09-17.md`.
 
