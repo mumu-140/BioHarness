@@ -26,6 +26,7 @@ Current records:
 - `docs/architecture/memory-pathway-consolidation-and-promotion.md`
 - `docs/architecture/scientific-contracts-and-run-semantics.md`
 - `docs/architecture/multi-perspective-review-2026-09-18.md`
+- `docs/architecture/workflow-executor-capabilities-and-p0-source-audit.md`
 
 ### Evidence and reference records
 
@@ -100,6 +101,8 @@ In particular, the following older interpretations are superseded:
 
 The accompanying executable-spec additions are in `docs/architecture/scenario-validation-addendum-2026-09-18.md` and remain `NOT_RUN`.
 
+`docs/architecture/workflow-executor-capabilities-and-p0-source-audit.md` further narrows execution-provider assumptions using the actual Genome-web TF launcher/source: provider capabilities are revision-scoped and must be declared honestly; the current P0 uses Nextflow's local executor and synchronous launcher rather than claiming a generic remote submit/poll service; unsupported reconciliation remains explicit; automated resume should bind explicit session lineage when feasible; and BioHarness must register the resolved scientific inputs actually consumed.
+
 ## 5. Stable Architecture That Remains Active
 
 The following existing principles remain unchanged:
@@ -128,7 +131,7 @@ registered genome inputs
     -> ScientificAssessment + current PolicyDecision
     -> ResolvedConfiguration + immutable RunSpec
     -> current side-effect authorization
-    -> external Nextflow execution
+    -> local Nextflow WorkflowExecutor adapter
     -> RunAttempt / RunEvent collection
     -> candidate Artifact registration
     -> typed ValidationReports / ValidationProfile
@@ -140,7 +143,9 @@ P0 explicitly stops before automatic publication to the production biological da
 
 The scientific question is frozen in `ScientificTaskSpec`; provider/method parameters such as representative-sequence rules, `min_seqs`, MAFFT/IQ-TREE parameters, seed, threads, and runtime identity belong to `ResolvedConfiguration`/RunSpec unless the scientific question explicitly fixes them.
 
-See `docs/architecture/p0-genome-web-tf-vertical-slice.md` and the review corrections.
+P0 validates the real current local Nextflow integration. Slurm/SSH/Kubernetes, distributed locks, generic WES/TES execution, and provider-native exactly-once submission are later slices rather than implied P0 capabilities.
+
+See `docs/architecture/p0-genome-web-tf-vertical-slice.md`, `docs/architecture/workflow-executor-capabilities-and-p0-source-audit.md`, and the review corrections.
 
 ## 7. Verification Language
 
@@ -154,4 +159,4 @@ They must not imply runtime completion unless fresh execution evidence exists. U
 - `VALIDATED`: scientific/operational acceptance criteria have been executed and passed;
 - `NOT_RUN`: scenario exists only as a specification.
 
-As of this record, the scientific-contract and multi-perspective-review corrections are `DESIGNED`; all runtime validation scenarios and addenda remain `NOT_RUN`.
+As of this record, the scientific-contract, multi-perspective-review, and P0 provider-capability contracts are `DESIGNED`; all runtime validation scenarios and addenda remain `NOT_RUN`.
