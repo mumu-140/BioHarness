@@ -3,134 +3,135 @@
 Date: 2026-09-18
 Status: Authoritative navigation record
 
-BioHarness is currently in the architecture and validation-design phase. Runtime implementation does not yet exist in this repository.
+BioHarness is currently in the architecture and acceptance-design phase. Runtime implementation does not yet exist in this repository.
 
-## 1. Read These First
+## 1. Normal Reading Path
 
-Future contributors and agents should normally read BioHarness in this order:
+Future contributors/agents should normally read:
 
 1. `docs/superpowers/specs/2026-09-17-bioharness-architecture-design.md`
-   - stable product boundary and core Research Control Plane model.
+   - stable product boundary, ownership, provider model, core domain roles, V1 constraints.
 2. `docs/architecture/scientific-contracts-and-run-semantics.md`
-   - authoritative scientific intent, feasibility, authorization, data identity, RunSpec/RunAttempt, provider capability, validation, reproducibility, canonical-state, and context contracts.
+   - authoritative task/data/feasibility/authorization/configuration/RunSpec/RunAttempt/validation/Finding/reproducibility/canonical contracts.
 3. `docs/architecture/p0-genome-web-tf-vertical-slice.md`
-   - authoritative first implementation slice using the actual current Genome-web TF Nextflow provider.
+   - authoritative first implementation slice, pinned to the audited Genome-web TF provider revision.
 4. `docs/architecture/scenario-validation-plan.md`
-   - authoritative executable-spec catalog; all scenarios remain `NOT_RUN` until implementation executes them.
-5. Memory-specific architecture records when needed:
+   - authoritative acceptance-scenario catalog; scenarios remain `NOT_RUN` until concrete tests execute them.
+5. Memory records when memory/retrieval/consolidation behavior is relevant:
    - `docs/architecture/provider-composition-and-research-memory.md`
    - `docs/architecture/hierarchical-associative-memory.md`
    - `docs/architecture/memory-pathway-consolidation-and-promotion.md`
 
-This path is intentionally short. A future implementation should not need to traverse multiple same-PR correction records to discover the final meaning of a contract.
+This path is intentionally short. Review/audit history is not required to discover final semantics.
 
 ## 2. Document Classes
 
-### Core architecture
+### Authoritative design
 
-- `docs/superpowers/specs/2026-09-17-bioharness-architecture-design.md`
+- core architecture spec;
+- scientific/run contract;
+- P0 vertical slice;
+- acceptance-scenario catalog;
+- three memory architecture records.
 
-Defines the stable product boundary: headless Research Control Plane, provider/adapter architecture, governed computation, evidence/provenance, and research-memory feedback.
+Focused contracts control their explicit domain. Cross-cutting scientific/run safety rules constrain memory/provider reuse where the domains intersect.
 
-### Authoritative focused contracts
-
-- `docs/architecture/scientific-contracts-and-run-semantics.md`
-- `docs/architecture/p0-genome-web-tf-vertical-slice.md`
-- `docs/architecture/scenario-validation-plan.md`
-- memory architecture records listed above.
-
-These files contain current normative design semantics for their scope.
-
-### Evidence/reference records
+### Evidence/reference
 
 - `docs/architecture/reference-architectures.md`
 - `docs/architecture/evidence-register-2026-09-17.md`
 
-These document external systems, papers, standards, and internal projects used to inform design. Evidence records do not override BioHarness contracts by themselves.
+Evidence informs design but never overrides contracts by itself.
 
-### Review/audit records
+### Review/audit rationale
 
 - `docs/architecture/multi-perspective-review-2026-09-18.md`
 - `docs/architecture/workflow-executor-capabilities-and-p0-source-audit.md`
 
-These preserve why the contracts were changed and what sources were inspected. They are non-authoritative rationale records and never participate in precedence resolution. Final rules have been integrated into the authoritative contract/P0/validation documents.
+These preserve why decisions changed and what was inspected. They are non-authoritative.
 
 ### Plans
 
 - `docs/superpowers/plans/`
 
-Plans describe intended work. A plan is never proof that the described capability exists.
+Plans describe intended/completed documentation work; they are not runtime evidence.
 
 ## 3. Conflict Rule
 
 When records appear to conflict:
 
-1. the core architecture defines stable system boundaries;
-2. an authoritative focused contract controls its explicit domain;
-3. memory-specific records control memory semantics unless the scientific/run contract explicitly constrains a cross-cutting safety/scientific rule;
-4. review/audit/evidence/plan files do not override authoritative contracts;
-5. implementation behavior becomes authoritative only when backed by implemented contracts, tests, and fresh execution evidence.
+1. core architecture controls stable product/system boundaries;
+2. authoritative focused contracts control their explicit semantic domain;
+3. `scientific-contracts-and-run-semantics.md` controls cross-cutting scientific validity, action-scoped authorization, data/run identity, execution/validation/Finding/reproducibility/canonical rules;
+4. memory records control retrieval/pathway/lifecycle semantics subject to those cross-cutting constraints;
+5. evidence/review/audit/plan files do not participate in precedence resolution;
+6. runtime behavior becomes implementation evidence only when backed by code/tests/fresh execution records.
 
-Git history preserves how decisions evolved; normal readers should use the final authoritative documents rather than reconstructing that history from old review wording.
+Git history preserves evolution; normal readers use final authoritative documents.
 
 ## 4. Stable Architecture
 
-The following remain active:
+Active principles:
 
-- BioHarness is headless; Web is a client/workbench, not a scientific source of truth.
-- Mature scientific algorithms and workflow engines remain external providers whenever practical.
-- Genome-web remains an authoritative biological Data Provider rather than being copied into BioHarness.
-- Official computation is governed and historical Run/Artifact evidence is immutable by default.
-- Scientific intent, analysis feasibility, authorization, execution completion, validation, Finding/interpretation, and canonical publication are distinct.
-- Authoritative state, derived Research Memory, and ephemeral model context are distinct.
-- Memory cannot directly become Policy or Canonical state.
-- Memory activation, maturity, and scope are separate dimensions.
-- Project closeout consolidates/cools memory rather than deleting scientific history.
-- Graph/vector infrastructure remains optional until real workload proves value.
+- headless Research Control Plane; Web is a client/workbench;
+- mature algorithms/workflow engines remain external providers;
+- Genome-web remains an authoritative biological Data Provider;
+- protected access/actions use current action/resource-scoped authorization where applicable;
+- historical ContextSnapshot/PolicyDecision explains the past but does not grant present authority;
+- ScientificTaskSpec, ScientificAssessment, ResolvedConfiguration, RunSpec, RunAttempt, Artifact, typed validation, Finding, Decision, ResearchMemory, and canonical state remain distinct;
+- Artifacts/history are immutable by default; current selection/acceptance lives in separate governed records;
+- ResearchMemory is evidence-linked derived knowledge and cannot directly become Policy/Finding/Canonical state;
+- memory activation, maturity, and scope are independent;
+- dependency-aware impact determines scientific reuse/revalidation, not graph topology or adaptive-slot labels;
+- graph/vector infrastructure remains optional until real workload proves value.
 
 ## 5. Current P0 Path
 
 ```text
-registered genome inputs
+requested logical genome resources
+    -> current authorization for protected resolution when needed
     -> ResolvedDataRefs + resolved-member provenance
-    -> ScientificTaskSpec
+    -> ScientificTaskSpec + candidate method contract
     -> ScientificAssessment
     -> ResolvedConfiguration
+    -> reassessment if assumption-relevant config changed
     -> ContextSnapshot + immutable RunSpec
-    -> current PolicyDecision for launch
+    -> current authorization for launch
     -> revision-scoped WorkflowExecutor capability check
     -> local synchronous Genome-web Nextflow RunAttempt
     -> RunEvents + candidate Artifacts
-    -> typed ValidationReports evaluated by ValidationProfile
-    -> Decision / MemoryCandidate
+    -> typed ValidationReports + versioned ValidationProfile evaluation
+    -> optional Finding / Decision / scoped MemoryCandidate
 ```
 
-P0 stops before automatic production publication or canonical update.
+P0 stops before automatic production publication/canonical mutation.
 
-The current Genome-web pilot is explicitly treated as a synchronous local Nextflow integration. Slurm/SSH/Kubernetes and generic async exactly-once submission are later slices.
+Audited Genome-web provider revision for this design: `05072cbbcd533ca59afa13996d8d0edd8f939c6e`.
 
-## 6. Consolidation Status
+The inspected provider is local/synchronous. Generic Slurm/SSH/Kubernetes, async polling, provider-native exactly-once, durable cancellation, and generic WES/TES behavior are later slices.
 
-The 2026-09-18 multi-perspective review and Genome-web source audit have already been folded back into the authoritative contracts. Their separate files remain only for rationale/audit history.
+## 6. Review/Consolidation Status
 
-The former `scenario-validation-addendum-2026-09-18.md` has been merged into the primary `scenario-validation-plan.md` and is no longer part of the final branch diff.
+Two fresh multi-perspective design passes have been folded directly into the authoritative documents. Review/source-audit records remain rationale only.
+
+The former separate validation addendum was merged into the primary scenario catalog and is not part of the final branch diff.
 
 ## 7. Verification Language
 
-Use these terms consistently:
+Use consistently:
 
 - `DESIGNED`: contract exists in documentation.
-- `IMPLEMENTED`: runtime code exists for the contract.
-- `TESTED`: a specified test/scenario has been executed with fresh evidence.
-- `VALIDATED`: the stated acceptance criteria were executed and passed for the stated scope.
-- `NOT_RUN`: scenario exists only as a specification.
+- `IMPLEMENTED`: runtime code exists for the stated contract.
+- `TESTED`: specified test/scenario executed with fresh evidence.
+- `VALIDATED`: stated acceptance criteria executed and passed for the stated scope.
+- `NOT_RUN`: scenario exists only as design/acceptance specification.
 
 Current state:
 
 ```text
 architecture/contracts = DESIGNED
 BioHarness runtime = NOT_IMPLEMENTED
-P0/scenario validation = NOT_RUN
+acceptance scenarios = NOT_RUN
 ```
 
-No review document, plan, or prose statement should be used as evidence that runtime behavior already works.
+No plan/review/prose statement is evidence that runtime behavior already works.
