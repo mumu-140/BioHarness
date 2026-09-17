@@ -1,7 +1,7 @@
 # BioHarness P0 Runtime Kernel Design
 
 Date: 2026-09-18
-Status: Design approved in principle; written-spec review required before implementation planning
+Status: APPROVED FOR IMPLEMENTATION PLANNING
 Runtime status: NOT_IMPLEMENTED
 Acceptance status: NOT_RUN
 Branch: `design/p0-runtime-kernel`
@@ -9,13 +9,13 @@ Base: `main@56f3dd1362ed5c772a8062df6456bc21a53a7b80`
 
 ## 1. Purpose
 
-P0 turns the existing BioHarness architecture contracts into the smallest real runtime that can govern one end-to-end scientific analysis around the audited Genome-web TF Nextflow pilot.
+P0 turns the existing BioHarness architecture contracts into the smallest real runtime that can govern one end-to-end scientific analysis. The audited Genome-web TF Nextflow pilot is the first **reference integration and acceptance case** used to exercise that runtime; it is not part of BioHarness Core.
 
 The goal is not to build a generic agent platform, workflow engine, Web application, or scientific algorithm suite. The goal is to prove one authoritative research-control loop:
 
 ```text
 ScientificTaskSpec
-  -> authorized data resolution
+  -> authorized data resolution through a DataProvider
   -> ResolvedDataRef(s)
   -> ScientificAssessment
   -> ResolvedConfiguration
@@ -23,14 +23,16 @@ ScientificTaskSpec
   -> immutable RunSpec
   -> current launch authorization
   -> RunAttempt / RunEvent
-  -> existing Genome-web TF launcher
-  -> Nextflow / MAFFT / IQ-TREE
+  -> WorkflowExecutor port
+  -> external provider/workflow/tooling
   -> Artifact registration
   -> typed ValidationReport / ValidationProfile evaluation
   -> scoped evidence-backed MemoryCandidate
 ```
 
-The first real integration test runs in an isolated BioHarness P0 environment on a server where the Genome-web TF pilot is already runnable. Genome-web source data are read-only. BioHarness uses its own PostgreSQL database and its own run root and does not write Genome-web production outputs.
+The first real acceptance case runs in an isolated BioHarness P0 environment on a server where the Genome-web TF pilot is already runnable. Genome-web source data are read-only. BioHarness uses its own PostgreSQL database and its own run root and does not write Genome-web production outputs.
+
+A successful reference case proves that BioHarness can govern an external scientific system. It does not make that external system a BioHarness subsystem.
 
 ## 2. Authoritative Existing Contracts
 
@@ -44,14 +46,16 @@ This runtime design refines implementation mechanics but does not replace the ex
 
 If implementation details conflict with those contracts, the implementation detail must change unless the authoritative contract is explicitly revised through a separate design decision.
 
-The Genome-web provider remains pinned for P0 to:
+The first reference case is pinned to:
 
 ```text
 repository: mumu-140/genome-web-backend
 revision:   05072cbbcd533ca59afa13996d8d0edd8f939c6e
 ```
 
-The adapter must refuse to silently inherit the audited capability claims when configured against a different provider revision.
+Those source observations support only the Genome-web TF reference adapter and its acceptance evidence. BioHarness Core must not hard-code that repository, revision, manifest schema, command line, Nextflow workflow, or provider capability set.
+
+A reference adapter must refuse to silently inherit audited capability claims when configured against a different provider revision.
 
 ## 3. Chosen Architecture
 
@@ -71,23 +75,30 @@ P0 uses a Python modular monolith with ports/adapters and PostgreSQL as the auth
                   |                           |
                   v                           v
            Domain / Contracts              Ports
+                  |                DataProvider / WorkflowExecutor
                   |                           |
-                  |                  +--------+---------+
-                  |                  |                  |
-                  v                  v                  v
-             PostgreSQL       Genome-web Data    TF Executor Adapter
-                               Adapter             |
-                                                   v
-                                     existing run.sh / run.py
-                                                   |
-                                                   v
-                                             Nextflow
-                                         MAFFT / IQ-TREE
+                  v                           v
+             PostgreSQL               External adapters
+                                      /             \
+                               provider A        provider B
 ```
 
 Core/domain code does not import Genome-web, Nextflow, PostgreSQL, Pi, DeepSeek Harness, or Web code. Concrete dependencies stay behind adapters.
 
-P0 does not implement a dynamic plugin loader. Python protocols/interfaces are enough while there is one real Data Provider and one Workflow Executor. A plugin runtime is deferred until multiple independently distributed providers make dynamic composition operationally useful.
+P0 includes generic infrastructure adapters only where they are part of the control plane itself, such as PostgreSQL persistence, filesystem artifact access, and a generic local-process execution primitive. Scientific/provider-specific bindings are reference or external integrations, not Core.
+
+P0 does not implement a dynamic plugin loader. Python protocols/interfaces are enough while there are few integrations. A plugin runtime is deferred until multiple independently distributed providers make dynamic composition operationally useful.
+
+### 3.1 Reference-integration boundary
+
+The Genome-web TF case follows four hard rules:
+
+1. `validate_genomes.py`, `run.sh`, `run.py`, the Nextflow pipeline, MAFFT, IQ-TREE, and Genome-web schemas remain owned by Genome-web or their upstream projects.
+2. BioHarness does not vendor or copy those scripts into `src/bioharness`.
+3. The provider-specific adapter/configuration lives under a reference/example integration boundary and is not required to import or use BioHarness Core.
+4. Removing the Genome-web reference integration must leave the BioHarness package, migrations, generic unit tests, and generic contract/integration tests functional.
+
+The reference integration may translate BioHarness port contracts to external commands/files, but it cannot define Core semantics.
 
 ## 4. Relationship to Pi and DeepSeek Harness
 
@@ -172,28 +183,35 @@ BioHarness/
 │   │   ├── policy.py
 │   │   └── repositories.py
 │   ├── adapters/
-│   │   ├── genome_web/
-│   │   │   ├── data.py
-│   │   │   └── tf_executor.py
 │   │   ├── postgres/
-│   │   └── filesystem/
+│   │   ├── filesystem/
+│   │   └── local_process/
 │   ├── identity/
 │   │   ├── canonical.py
 │   │   └── projections.py
 │   └── cli/
 ├── migrations/
+├── examples/
+│   └── reference_integrations/
+│       └── genome_web_tf/
+│           ├── data_adapter.py
+│           ├── executor_adapter.py
+│           └── README.md
 └── tests/
     ├── unit/
     ├── contract/
     ├── integration/
+    ├── reference/
     └── fixtures/
 ```
+
+`examples/reference_integrations/**` is not part of the installed BioHarness Core package and may depend on the external provider repository/environment. Provider-specific scripts remain external and are invoked/referenced, not copied.
 
 Files may be split further when a unit becomes hard to understand independently. P0 must not create generic framework abstractions that have only one speculative consumer.
 
 ## 7. Source of Truth and Persistence Model
 
-PostgreSQL is authoritative for BioHarness control-plane state. Filesystem content is authoritative for artifact bytes and execution evidence stored under the isolated BioHarness run root, but control-plane identity, relationships, state transitions, validation, and governance are persisted in PostgreSQL.
+PostgreSQL is authoritative for BioHarness control-plane state. Filesystem content is authoritative for artifact bytes and execution evidence stored under an isolated BioHarness run root, but control-plane identity, relationships, state transitions, validation, and governance are persisted in PostgreSQL.
 
 This deliberately differs from Sapporo's current approach where run-directory files are master data and SQLite is a rebuildable index. BioHarness may reuse Sapporo's process/reconciliation patterns, but not that source-of-truth model.
 
@@ -247,7 +265,7 @@ The relational schema must enforce the identities that protect execution semanti
 run_specs.run_spec_hash                         UNIQUE
 run_attempts(run_spec_id, attempt_number)      UNIQUE
 run_attempts.submission_key                    UNIQUE
-run_attempts.provider_attempt_name             UNIQUE within one configured P0 executor/run-root namespace
+run_attempts.provider_attempt_name             UNIQUE within one configured executor/run-root namespace
 run_events(run_attempt_id, sequence_no)        UNIQUE
 validation_profiles(profile_id, revision)      UNIQUE
 ```
@@ -298,22 +316,28 @@ SHA-256(RFC8785-canonical-json(versioned_projection))
 
 All projections are explicit functions with a named schema/projection version. Adding or changing projection semantics requires a new projection version; it must not silently change hashes for historical records.
 
-## 9. Genome-web Data Resolution
+## 9. Data Resolution Port and Genome-web Reference Case
 
-BioHarness does not reimplement Genome-web manifest rules. The Genome-web Data Adapter invokes the audited provider resolver `pipeline/nextflow/scripts/validate_genomes.py` as an external provider operation.
+BioHarness Core owns a generic `DataProvider` contract. It does not know Genome-web manifest columns, biological table layouts, or `validate_genomes.py`.
 
-Planning flow:
+A DataProvider implementation is responsible for translating a requested logical scientific resource into a checkable provider result. BioHarness then records the resolved identity and, where configured, independently computes/checks content identities required by its reproducibility contract.
+
+Generic planning flow:
 
 ```text
-requested logical genome refs / supplied manifest
+requested logical scientific resources
   -> current read authorization where required
-  -> invoke provider resolver into BioHarness planning workspace
-  -> parse provider-resolved manifest
-  -> compute BioHarness member digests independently
+  -> DataProvider.resolve(...)
+  -> provider result + provider evidence
+  -> BioHarness identity checks/digests required by contract
   -> persist ResolvedDataRef(s)
 ```
 
-For each genome P0 freezes at least:
+### 9.1 Genome-web reference adapter
+
+The first reference adapter invokes the audited external provider resolver `pipeline/nextflow/scripts/validate_genomes.py`. That script remains part of Genome-web, not BioHarness.
+
+For the reference TF case, the adapter maps the provider result into identities including:
 
 ```text
 species_id
@@ -333,21 +357,23 @@ provider revision
 
 The user-supplied/original manifest digest is retained separately from the provider-resolved manifest digest.
 
-Immediately before external launch, BioHarness performs a fresh member-identity recheck outside the database lock/transaction. If a result-affecting member changed, the existing RunSpec is not submitted. The task must be re-resolved/replanned into a new scientific identity.
+These fields are **reference-adapter semantics**, not mandatory fields of every future `DataProvider`.
 
-The live P0 environment treats the configured Genome-web release inputs as read-only for the duration of a run. If a future provider cannot guarantee that operational property, its adapter must stage or otherwise bind an immutable input snapshot before claiming equivalent semantics.
+Immediately before external launch, BioHarness performs a fresh check of the frozen input identities required by the RunSpec outside the database lock/transaction. If a result-affecting member changed, the existing RunSpec is not submitted. The task must be re-resolved/replanned into a new scientific identity.
 
-The provider launcher performs its own validation again. BioHarness compares the launch attempt's `genomes.resolved.tsv` against the frozen planned identity and rechecks member digests during collection. A mismatch is a provenance/identity validation failure, not a warning that may be ignored.
+The live Genome-web reference environment treats the configured release inputs as read-only for the duration of a run. If another provider cannot guarantee an equivalent operational property, its adapter must stage or otherwise bind an immutable input snapshot before claiming equivalent semantics.
+
+The reference provider performs its own validation again at execution time. The reference adapter compares the provider-resolved execution inputs against the frozen planned identity and rechecks required member digests during collection. A mismatch is a provenance/identity validation failure, not a warning that may be ignored.
 
 ## 10. Scientific Assessment Boundary
 
 Provider/data preflight and scientific assessment remain distinct.
 
-Provider resolution establishes facts such as file availability, five-digit UID preservation, manifest shape, species/UID consistency, and provider identity rules. `ScientificAssessment` consumes those facts plus the TF module scientific contract and decides whether the requested analysis is supportable.
+Provider resolution establishes provider facts. `ScientificAssessment` consumes those facts plus the selected Module/Workflow scientific contract and decides whether the requested analysis is supportable.
 
 For P0, assessment is deterministic application/domain logic, not an LLM judgment.
 
-A missing production identity-collision snapshot may permit candidate-only analysis with an explicit limitation if the authoritative TF P0 contract allows it; it never permits production publication. Unsupported or ambiguous scientific intent remains `UNRESOLVED`/`INCOMPATIBLE` as defined by the existing contracts.
+The Genome-web TF reference case includes checks such as provider identity consistency and candidate-only limitations, but those checks do not become universal BioHarness scientific rules.
 
 The assessment stores a dependency fingerprint over the exact TaskSpec revision, ResolvedDataRefs, scientific-contract revision, and assumption-relevant constraints. Final ResolvedConfiguration must match or explicitly refresh that dependency fingerprint before a RunSpec becomes executable.
 
@@ -358,11 +384,13 @@ P0 needs real action-scoped authorization semantics even though it does not yet 
 The domain exposes a `PolicyEvaluator` port. The initial runtime adapter evaluates explicit local P0 rules such as:
 
 - actor identity is present;
-- Genome-web source roots configured for P0 are read-only inputs;
-- BioHarness writes only under the configured isolated run/artifact root;
-- launch targets the audited candidate-only workflow;
-- production loader/publication/canonical mutation is denied in P0;
+- configured provider source roots are read-only inputs when policy requires that property;
+- BioHarness writes only under configured allowed run/artifact roots;
+- configured protected/production roots are denied;
+- production publication/canonical mutation is denied in P0;
 - policy revision is explicit and persisted.
+
+Provider-specific policies may add stricter constraints in a reference/external integration without changing the Core policy model.
 
 Every authorization decision is immutable and records actor, action, resource/scope, policy revision, outcome, timestamp, and warnings/obligations when applicable.
 
@@ -374,7 +402,9 @@ Tests use a deterministic policy adapter so AUTH-01/AUTH-02 can inject policy ch
 
 Provider defaults are resolved into `ResolvedConfiguration`; they are not silently inserted into ScientificTaskSpec.
 
-For the audited TF pilot, configuration includes at least:
+The generic model records result-affecting provider/workflow revision, method parameters, software/environment identity requirements, validation-profile revision, ReproducibilityContract, and planned environment/resource controls as required by the selected scientific contract.
+
+For the Genome-web TF reference case, configuration includes at least:
 
 ```text
 provider/workflow revision
@@ -394,15 +424,15 @@ ReproducibilityContract
 planned environment/resource controls
 ```
 
-For P0, planning occurs on the intended execution host and runs an environment probe before publishing an executable RunSpec. The exact Nextflow/Python/Biopython/MAFFT/IQ-TREE identities required by the current reproducibility contract are therefore bound before RunSpec publication. The launcher later records its own fingerprints, and collection/validation compares those observed identities against the frozen plan.
+For the first reference case, planning occurs on the intended execution host and runs an environment probe before publishing an executable RunSpec. The exact result-affecting tool/runtime identities required by the reproducibility contract are therefore bound before RunSpec publication. The external provider later records its own fingerprints, and collection/validation compares those observed identities against the frozen plan.
 
-If the execution host cannot satisfy or determine a required result-affecting identity, BioHarness does not publish an executable RunSpec for that configuration.
+If the execution environment cannot satisfy or determine a required result-affecting identity, BioHarness does not publish an executable RunSpec for that configuration.
 
 RunSpec creation is an immutable publication step. Once created, changes to result-affecting input/configuration produce another RunSpec rather than updating the existing row.
 
 ## 13. RunAttempt and RunEvent Model
 
-Each BioHarness-issued external launch is one RunAttempt. Provider/Nextflow internal retries remain within that RunAttempt. A new BioHarness resume/relaunch is a new RunAttempt even when compatible cached work is reused.
+Each BioHarness-issued external launch is one RunAttempt. Provider/workflow-engine internal retries remain within that RunAttempt. A new BioHarness resume/relaunch is a new RunAttempt even when compatible cached work is reused.
 
 P0 attempt states are:
 
@@ -418,7 +448,7 @@ NEEDS_OPERATOR_RECONCILIATION
 
 A RunAttempt is created only when BioHarness is actually preparing a concrete external submission, so P0 does not create a separate unused `DRAFT` attempt state. Planning state belongs to TaskSpec/Assessment/Configuration/RunSpec.
 
-P0 does not advertise `QUEUED`, `CANCELLING`, or `CANCELLED` because the audited provider exposes a synchronous local process and no durable cancellation interface.
+The generic P0 kernel does not fabricate queue/cancel semantics. An adapter may expose stronger capabilities later through its capability snapshot; the first local-process reference case does not advertise durable queueing or cancellation.
 
 Durable RunEvents include at least:
 
@@ -441,27 +471,29 @@ Transient observations such as repeated stdout tail updates or periodic process-
 
 ## 14. Exactly-Once Is Not Claimed
 
-The audited Genome-web provider has no native idempotency key and no durable async external execution ID. BioHarness therefore does not claim provider exactly-once submission.
+BioHarness has a generic executor capability model. It claims provider-native idempotency or durable external identity only when the active WorkflowExecutor adapter explicitly supports and evidences those capabilities.
 
-`submission_key` is a BioHarness-local attempt correlation/idempotency-intent identifier only. It is not presented as a provider guarantee.
+The audited Genome-web TF reference provider has no native idempotency key and no durable async external execution ID, so that reference case does not claim provider exactly-once submission.
+
+`submission_key` is a BioHarness-local attempt correlation/idempotency-intent identifier only unless an adapter explicitly binds it to a provider-native guarantee.
 
 The critical safety rule is:
 
 > After BioHarness has durably committed a submission intent for a RunAttempt, an ambiguous interruption never causes an automatic second external launch of that same attempt.
 
-A new attempt may be created only after the prior attempt's status has been established sufficiently under the provider's actual evidence/capabilities or an operator explicitly resolves the ambiguity according to policy.
+A new attempt may be created only after the prior attempt's status has been established sufficiently under the active provider's actual evidence/capabilities or an operator explicitly resolves the ambiguity according to policy.
 
 ## 15. Launch Transaction Boundary
 
-External process creation cannot be made atomic with PostgreSQL, so P0 uses an explicit preflight + intent-before-side-effect protocol.
+External process creation cannot be made atomic with PostgreSQL, so the local-process P0 executor uses an explicit preflight + intent-before-side-effect protocol.
 
 ### Phase 0: fresh launch preflight, no database lock
 
 Immediately before submission BioHarness:
 
-1. re-hashes/rechecks the frozen input members;
+1. rechecks the frozen input identities required by the RunSpec;
 2. verifies the planned provider/workflow revision and execution-environment fingerprints;
-3. verifies the configured run root remains isolated from protected production paths;
+3. verifies configured writable roots remain isolated from protected roots;
 4. produces a short-lived launch-preflight evidence record bound to the RunSpec identity.
 
 Failure here creates no external RunAttempt and no external side effect.
@@ -481,13 +513,15 @@ In one short PostgreSQL transaction:
 
 No large file hashing or external process call occurs while this transaction/lock is held.
 
-Only after this commit may the adapter create the external process.
+Only after this commit may the executor produce an external side effect.
 
 ### Phase B: external process bind
 
-The TF executor uses `subprocess.Popen` to invoke the existing Genome-web `run.sh`/launcher. It does not construct a raw `nextflow run` command itself.
+The generic local-process adapter uses `subprocess.Popen` with an immutable adapter-produced invocation specification. BioHarness Core does not construct provider-specific commands.
 
-The adapter immediately records observable process binding evidence such as host identity, PID, command fingerprint, provider attempt name, and timestamps, then appends `ExternalProcessBound`/`ExecutionStarted` and moves the read model to `RUNNING` in one state-plus-event transaction.
+For the Genome-web TF reference case only, the reference executor adapter points the generic local-process primitive at the existing external Genome-web `run.sh`/launcher. The launcher and command semantics remain outside BioHarness Core.
+
+The executor immediately records observable process binding evidence such as host identity, PID, command fingerprint, provider attempt name, and timestamps, then appends `ExternalProcessBound`/`ExecutionStarted` and moves the read model to `RUNNING` in one state-plus-event transaction.
 
 ### Phase C: completion/ambiguity
 
@@ -503,37 +537,37 @@ A user interrupt of the BioHarness CLI stops local waiting/observation but does 
 
 ## 16. Reconciliation
 
-P0 reconciliation is deliberately evidence-based and limited.
+P0 reconciliation is deliberately evidence-based and capability-limited.
 
-Potential evidence includes:
+The generic executor/reconciliation contract may inspect adapter-declared evidence such as:
 
 ```text
 BioHarness RunAttempt state/events
-recorded host/PID/process binding
-provider attempt directory
-provider invocation.json
-provider genomes.resolved.tsv
-nextflow.log
-trace.tsv
-Nextflow session/cache metadata when identifiable
-candidate manifest
-provider exit evidence captured by BioHarness
-launch lock/process observations
+recorded host/process binding
+provider execution/workspace identifiers
+provider invocation metadata
+provider logs/trace
+provider/session/cache identifiers where exposed
+output/candidate markers
+captured process exit evidence
+lock/process observations
 ```
+
+The Genome-web TF reference adapter maps its `invocation.json`, resolved manifest, Nextflow log/trace/session evidence, candidate manifest, and launch/process observations into that generic evidence vocabulary. Those filenames are not BioHarness Core concepts.
 
 Reconciliation rules prefer strong terminal evidence:
 
-1. valid candidate package plus compatible captured process exit can establish completed execution;
+1. valid provider completion evidence plus compatible captured process exit can establish completed execution;
 2. explicit captured non-zero exit establishes failure;
 3. a still-running process may keep the attempt active only when process identity is sufficiently consistent with the recorded binding;
 4. a stale PID alone is not proof because PID reuse is possible;
 5. conflicting or insufficient evidence yields `NEEDS_OPERATOR_RECONCILIATION` rather than a guessed state.
 
-Automatic `--resume` remains disabled in P0 until the intended prior Nextflow session identity can be bound reliably. Bare `--resume`/implicit `last` is never used as scientific identity.
+Automatic engine resume remains disabled for an adapter until the intended prior external/session identity can be bound reliably. Provider shorthands such as implicit `last` are never treated as scientific identity.
 
 ## 17. Artifact and Filesystem Model
 
-The isolated server layout is:
+A typical isolated server layout is:
 
 ```text
 /srv/bioharness-p0/
@@ -543,12 +577,14 @@ The isolated server layout is:
 └── logs/
 ```
 
-Exact deployment paths are configurable, but all writable P0 paths must remain disjoint from Genome-web production roots.
+Exact deployment paths are configurable. All writable P0 paths must remain disjoint from configured protected/production roots.
 
-The TF provider's attempt output under the BioHarness run root is treated as immutable after registration. P0 registers important scientific outputs and execution evidence, including where applicable:
+Provider attempt output under the BioHarness run root is treated as immutable after registration. P0 registers important scientific outputs and execution evidence declared by the active adapter/contract.
+
+For the Genome-web TF reference case, examples include:
 
 - resolved manifest;
-- `invocation.json`;
+- external provider `invocation.json`;
 - Nextflow log and trace;
 - candidate manifest;
 - representative protein bundles;
@@ -556,7 +592,9 @@ The TF provider's attempt output under the BioHarness run root is treated as imm
 - trees;
 - family/batch summary and audit tables.
 
-The Nextflow `work/` directory is execution cache, not automatically an Artifact collection.
+Those artifact roles are reference-case mappings, not a universal BioHarness output schema.
+
+Workflow-engine work/cache directories are execution cache, not automatically an Artifact collection.
 
 Every registered Artifact records at least immutable ID, role/type, content SHA-256, size, URI/path, creating RunAttempt/RunSpec references, created/discovered time, and relevant provider metadata.
 
@@ -566,7 +604,7 @@ P0 does not duplicate large files into PostgreSQL.
 
 Provider completion and provider `PASS` are not universal validation.
 
-P0 creates separate typed ValidationReports. At minimum:
+P0 creates separate typed ValidationReports. At minimum the generic P0 model supports:
 
 ```text
 provider_contract
@@ -625,7 +663,7 @@ bioharness memory list
 
 CLI output must expose stable IDs and scientific/control-plane state rather than only human-readable success text.
 
-The CLI never bypasses application/domain services to call Genome-web or Nextflow directly.
+The CLI never bypasses application/domain services to invoke a provider/workflow directly.
 
 ## 21. Reuse Policy for External Projects
 
@@ -637,7 +675,7 @@ Use mature libraries instead of copying generic infrastructure: Pydantic, SQLAlc
 
 ### Direct external invocation
 
-Keep mature scientific/provider logic in its owning project and invoke it through adapters. Genome-web manifest resolution, launcher rules, Nextflow workflow, MAFFT, and IQ-TREE remain external sources of truth.
+Keep mature scientific/provider logic in its owning project and invoke it through adapters. The Genome-web resolver/launcher/Nextflow workflow, MAFFT, and IQ-TREE are the first reference case of this rule; they remain external sources of truth and are not BioHarness components.
 
 ### Pattern-level adaptation
 
@@ -661,48 +699,57 @@ Pure domain/identity rules:
 - validation profile evaluation;
 - memory authority boundaries.
 
-### Contract tests
+### Generic contract tests
 
-Adapter semantics with fixtures/fakes:
+BioHarness-owned ports and adapters are tested without Genome-web:
 
-- five-digit UID preservation;
-- cross-UID failure propagation;
-- provider capability snapshot pinned to audited revision;
-- resolved-manifest/member digest capture;
-- provider PASS mapped to typed validation only;
-- local submission key never represented as provider exactly-once;
-- UNKNOWN forbids blind duplicate launch.
+- DataProvider result -> ResolvedDataRef mapping contract;
+- WorkflowExecutor capability snapshot semantics;
+- local submission key never represented as provider exactly-once unless explicitly supported;
+- UNKNOWN forbids blind duplicate launch;
+- provider PASS can map only to typed validation evidence;
+- artifact identity/digest registration contract.
 
 ### Integration tests
 
-Use PostgreSQL plus temporary filesystem and a deterministic fake/small launcher to test transaction boundaries, concurrent attempt allocation, crash windows, artifact registration, and reconciliation.
+Use PostgreSQL plus temporary filesystem and a deterministic fake/small provider process to test transaction boundaries, concurrent attempt allocation, crash windows, artifact registration, reconciliation, policy changes, and immutable history. These tests must pass without the Genome-web repository or biological data.
+
+### Reference-integration tests
+
+Genome-web-specific tests live under the reference boundary and may exercise:
+
+- five-digit UID preservation;
+- cross-UID failure propagation;
+- provider capability snapshot pinned to the audited revision;
+- resolved-manifest/member digest capture;
+- reference provider PASS mapping;
+- explicit Nextflow resume identity limitations.
+
+These tests validate the adapter/case, not BioHarness Core semantics.
 
 ### Live P0 acceptance run
 
 Run only in the isolated server environment with real Genome-web source data and the audited TF pilot. It records the complete acceptance evidence required by `scenario-validation-plan.md`.
 
-GitHub CI may run unit/contract/integration tests that do not require private biological data or installed MAFFT/IQ-TREE/Nextflow. The live scientific P0 run is not silently substituted with a mock CI run.
+GitHub CI may run unit/generic contract/integration tests that do not require private biological data or installed MAFFT/IQ-TREE/Nextflow. The live scientific P0 reference run is not silently substituted with a mock CI run.
 
 ## 23. Initial Acceptance Slice
 
 The implementation plan must prioritize the scenarios needed to prove the first vertical slice rather than attempting every future architecture scenario at once.
 
-Required first-slice scenarios are:
+### Core-kernel slice
+
+The following scenario semantics must be implementable without relying on Genome-web internals:
 
 ```text
-TF-01  leading-zero UID
-TF-02  cross-UID conflict
 TF-03  TaskSpec excludes provider defaults
 AUTH-01 historical authorization cannot authorize new launch
 AUTH-02 protected resolution authorized before access
 PLAN-01 assessment dependency binding
 PLAN-02 assumption-relevant config change forces reassessment
-EXEC-01 capability honesty
 EXEC-02 attempt-scoped submission identity
 EXEC-03 engine retry is not a new RunAttempt
 EXEC-05 unknown outcome does not duplicate submission
-EXEC-06 implicit last is not resume identity
-DATA-01 resolved manifest/member provenance
 VAL-01 provider PASS is typed
 VAL-02 generic PASS collapse impossible
 VAL-05 no implicit publication
@@ -710,23 +757,39 @@ PROM-04 Memory cannot directly become Policy/Finding
 SEC-01 external content cannot mutate control state
 ```
 
+`TF-03` retains its historical scenario ID but tests a generic BioHarness rule: provider defaults are configuration, not scientific intent.
+
+### Genome-web TF reference slice
+
+These scenarios are reference-adapter/acceptance evidence rather than Core product coupling:
+
+```text
+TF-01  leading-zero UID
+TF-02  cross-UID conflict
+EXEC-01 capability honesty for audited Genome-web revision
+EXEC-06 implicit Nextflow last is not resume identity
+DATA-01 resolved Genome-web manifest/member provenance
+```
+
 Other catalog scenarios remain authoritative but may follow after this minimal execution slice unless they become necessary for implementation correctness.
 
 ## 24. Deployment and Safety Boundary
 
-First real P0 integration uses:
+Generic P0 deployment requires:
 
 ```text
-PostgreSQL database/schema: dedicated to BioHarness P0
-Genome-web source data:    read-only
+PostgreSQL database/schema: dedicated to BioHarness environment
+provider source data:      protected/read-only as configured
 BioHarness run root:       isolated writable path
-Genome-web production:     no writes
-production publication:    disabled
+protected production roots:no BioHarness writes
+production publication:    disabled in P0
 ```
+
+The first Genome-web reference acceptance environment is one concrete instance of that policy.
 
 BioHarness does not perform package installation, production build/deploy, or scientific run execution on the user's local Mac. Runtime validation belongs on the designated remote/test environment.
 
-The initial policy adapter must deny configured Genome-web production output roots and deny production/canonical publication actions.
+The initial policy adapter must enforce configured protected roots and deny production/canonical publication actions.
 
 ## 25. Failure Philosophy
 
@@ -771,30 +834,33 @@ P0 does not implement:
 - Celery/Temporal/Redis/Kafka;
 - Slurm/SSH/Kubernetes/WES/TES executors;
 - distributed locking;
-- provider-native exactly-once semantics;
-- durable provider cancellation;
-- automatic implicit Nextflow resume;
+- fabricated provider-native exactly-once semantics;
+- durable provider cancellation unless a future adapter actually supports it;
+- automatic implicit workflow-engine resume;
 - production publication or canonical mutation;
 - RNA-seq/DE/GO scientific contracts;
+- provider-specific scientific algorithms or scripts inside BioHarness Core;
 - reimplementation of Genome-web/Nextflow/MAFFT/IQ-TREE biological logic.
 
 ## 27. Success Criteria
 
-P0 is implemented only when executable evidence demonstrates all of the following:
+The P0 kernel is implemented only when executable evidence demonstrates all of the following:
 
 1. a real task can be represented as ScientificTaskSpec without leaking provider defaults into intent;
 2. protected input resolution and launch are independently/currently authorized;
-3. exact Genome-web member identities are frozen and rechecked before execution;
+3. exact provider-resolved scientific input identities can be frozen and rechecked before execution;
 4. ScientificAssessment is bound to explicit data/method dependencies;
 5. one immutable RunSpec can own one or more distinct RunAttempts without conflating identity;
 6. external submission intent is durable before process creation;
 7. an uncertain launch can remain UNKNOWN without blind duplicate submission;
-8. the existing Genome-web launcher is used rather than reimplemented;
+8. provider/workflow execution occurs through a declared adapter/capability boundary rather than provider-specific code embedded in Core;
 9. execution evidence and scientific artifacts are immutable/checkable by digest;
 10. provider PASS remains typed/provider-scoped rather than universal scientific validation;
 11. candidate output cannot become production/canonical state in P0;
 12. one scoped MemoryCandidate can be retrieved for a later task while remaining non-authoritative;
-13. the live acceptance record includes provider revision, implementation revision, data identity, assertions, observed results, timestamps, and supporting evidence.
+13. generic unit/contract/integration tests pass without the Genome-web repository or data.
+
+The Genome-web TF reference case additionally demonstrates that an external existing scientific workflow can satisfy these contracts without being absorbed into BioHarness. Its acceptance record includes provider revision, implementation revision, data identity, assertions, observed results, timestamps, and supporting evidence.
 
 Until those executable records exist, repository documentation must continue to report P0 runtime as `NOT_IMPLEMENTED`/acceptance as `NOT_RUN`.
 
@@ -807,16 +873,19 @@ This section fixes dependency order without serving as the detailed implementati
 2. canonical identity projections/hashes
 3. PostgreSQL repositories + migrations
 4. minimal policy evaluator and authorization records
-5. Genome-web data resolution adapter
+5. generic DataProvider / WorkflowExecutor contracts
 6. deterministic ScientificAssessment + ResolvedConfiguration
 7. RunSpec publication
-8. TF executor adapter and intent-before-side-effect RunAttempt lifecycle
-9. reconciliation
+8. generic local-process executor + intent-before-side-effect RunAttempt lifecycle
+9. generic reconciliation evidence model
 10. artifact collection/digests
 11. typed validation/profile evaluation
 12. MemoryCandidate retrieval
-13. contract/integration tests
-14. isolated live P0 acceptance run
+13. generic unit/contract/integration tests
+14. Genome-web TF reference adapters under examples/reference_integrations
+15. isolated live Genome-web TF P0 acceptance run
 ```
+
+The reference case is deliberately last in the dependency direction: it depends on BioHarness contracts, while BioHarness Core does not depend on the reference case.
 
 The detailed task/file/test sequence is created only after this written spec is reviewed and approved.
