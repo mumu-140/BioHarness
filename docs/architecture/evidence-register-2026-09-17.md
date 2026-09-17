@@ -2,13 +2,13 @@
 
 Updated: 2026-09-18
 Status: Evidence/reference record; non-authoritative
-Purpose: Record which papers, standards, mature projects, and internal systems informed BioHarness architecture, what was actually inspected, and the boundary of each inference.
+Purpose: Record which papers, standards, mature projects, and internal systems informed BioHarness architecture, what was inspected, and what is **not** inferred from each source.
 
-External evidence can justify a pattern or constrain a design choice. It does not become BioHarness Policy or scientific truth by citation alone.
+External evidence may justify a pattern or constrain a design decision. Citation alone does not create BioHarness Policy, scientific truth, or an implementation dependency.
 
 ## 1. Evidence Record Contract
 
-Each material source should record when practical:
+For material architecture evidence, record when practical:
 
 ```yaml
 source:
@@ -24,76 +24,61 @@ source:
 
 Every adoption statement should answer:
 
-1. what capability/observation is being borrowed;
+1. what pattern/observation is borrowed;
 2. which BioHarness contract it informs;
-3. what BioHarness deliberately does **not** infer.
+3. what is deliberately **not** inferred.
 
-Rolling documentation/repository pages should never be treated as immutable evidence without revision/check context.
+Rolling docs/repositories are not immutable evidence; pin revision/date where the architecture depends on concrete behavior.
 
 ## 2. Workflow, Provenance, and Recovery
 
 ### AiiDA
 
-Source:
-
-- Huber SP et al. *AiiDA 1.0, a scalable computational infrastructure for automated reproducible workflows and data provenance*. Scientific Data 7, 300 (2020).
-- https://doi.org/10.1038/s41597-020-00638-4
-- https://github.com/aiidateam/aiida-core
+- Source: Huber SP et al. *AiiDA 1.0, a scalable computational infrastructure for automated reproducible workflows and data provenance*. Scientific Data 7, 300 (2020). https://doi.org/10.1038/s41597-020-00638-4
+- Project: https://github.com/aiidateam/aiida-core
 - checked_at: 2026-09-17
-- inspection_depth: paper/official-project material used for architecture review
-- claim_scope: process provenance, persistent scientific execution, recoverable workflow state
+- inspection_depth: primary paper + official project material
+- claim_scope: persistent process state, provenance graph, recoverable scientific execution
 
-Adopt:
+Adopt: process/provenance separation and persistent execution-state patterns inform RunSpec/RunAttempt/Artifact provenance.
 
-- provenance is a first-class scientific object;
-- computation and provenance graph are distinct;
-- persistent process state/recovery is a useful reference for Run/Attempt semantics.
-
-Do not infer: BioHarness should migrate all pipelines to AiiDA or that provenance alone establishes scientific validity.
+Do not infer: BioHarness must migrate pipelines to AiiDA, or provenance alone establishes scientific validity.
 
 ### Nextflow / nf-core
-
-Sources:
 
 - https://www.nextflow.io/
 - https://github.com/nextflow-io/nextflow
 - https://nf-co.re/
 - https://github.com/nf-core
 - checked_at: 2026-09-17/18
-- inspection_depth: official docs/repository patterns; concrete Genome-web integration separately audited at source-code level
-- claim_scope: workflow execution, cache/resume, portable executors, module/workflow reuse
+- inspection_depth: official docs/repository patterns; concrete Genome-web integration audited separately at source-code level
+- claim_scope: workflow execution, cache/resume, portable executors, reusable workflow/module practice
 
-Adopt: keep Nextflow external as WorkflowExecutor; bind exact workflow/config/input/environment identity; reuse engine cache/resume.
+Adopt: keep Nextflow external as WorkflowExecutor; bind provider/workflow/input/configuration identity and explicit capabilities in BioHarness.
 
-Do not infer: Nextflow cache identity equals BioHarness scientific identity, workflow completion equals validation PASS, or every integration exposes async/idempotent remote submission.
+Do not infer: Nextflow cache identity equals BioHarness analysis identity; workflow completion equals universal validation; every integration provides async polling/idempotency/cancellation.
 
 ### Snakemake
-
-Source:
 
 - Köster J, Rahmann S. *Snakemake—a scalable bioinformatics workflow engine*. Bioinformatics 28, 2520-2522 (2012).
 - https://github.com/snakemake/snakemake
 - checked_at: 2026-09-17
-- inspection_depth: paper/repository reference
-- claim_scope: alternative mature workflow engine and reproducible composition
+- inspection_depth: primary paper + repository reference
+- claim_scope: alternative mature workflow engine/reproducible composition
 
-Adopt: normalize heterogeneous workflow engines behind BioHarness contracts.
+Adopt: normalize heterogeneous engines behind BioHarness contracts instead of forcing one executor.
 
 ### OpenLineage
-
-Source:
 
 - https://openlineage.io/
 - https://github.com/OpenLineage/OpenLineage
 - checked_at: 2026-09-17
 - inspection_depth: official docs/repository overview
-- claim_scope: Job/Run/Dataset lineage vocabulary
+- claim_scope: Run/Job/Dataset lineage vocabulary/event patterns
 
-Adopt: reuse compatible lineage vocabulary where useful; add BioHarness scientific/validation/Decision/memory semantics above it.
+Adopt: reuse compatible lineage vocabulary while retaining BioHarness scientific/validation/Finding/Decision/memory semantics.
 
 ### RO-Crate / Workflow Run RO-Crate
-
-Sources:
 
 - https://www.researchobject.org/ro-crate/
 - https://www.researchobject.org/workflow-run-crate/
@@ -103,24 +88,20 @@ Sources:
 
 Adopt: prefer standards-compatible export/archive when practical.
 
-Do not infer: metadata packaging guarantees future availability of every external input/environment.
+Do not infer: metadata packaging guarantees replayability or long-term availability of all external inputs/environments.
 
 ## 3. Data and Execution Interface Standards
 
 ### GA4GH DRS
 
-Source:
-
 - https://www.ga4gh.org/product/data-repository-service-drs/
 - checked_at: 2026-09-17
 - inspection_depth: official product/spec documentation
-- claim_scope: stable logical identity separated from access location/mechanism
+- claim_scope: logical data identity separated from access location/mechanism
 
-Adopt: use as a reference for `ResolvedDataRef`, supplemented by biological release and collection-membership identity.
+Adopt: reference pattern for `ResolvedDataRef`, supplemented by biological release and collection-member identity.
 
 ### GA4GH WES / TES / TRS
-
-Sources:
 
 - https://www.ga4gh.org/product/workflow-execution-service-wes/
 - https://www.ga4gh.org/product/task-execution-service-tes/
@@ -129,7 +110,7 @@ Sources:
 - inspection_depth: official product/spec documentation
 - claim_scope: workflow registry/execution/task boundary patterns
 
-Adopt: keep provider interfaces standards-alignable where reasonable.
+Adopt: avoid provider interfaces that unnecessarily prevent future standards alignment.
 
 Do not infer: P0 must implement GA4GH compliance.
 
@@ -137,23 +118,19 @@ Do not infer: P0 must implement GA4GH compliance.
 
 ### Open Policy Agent
 
-Sources:
-
 - https://www.openpolicyagent.org/docs/
 - https://github.com/open-policy-agent/opa
 - checked_at: 2026-09-17
 - inspection_depth: official docs/repository overview
-- claim_scope: explicit/testable policy decisions separated from application logic
+- claim_scope: explicit policy decision separated from application/scientific logic
 
-Adopt: keep `PolicyDecision` separate from scientific feasibility and execution state; OPA may later be an adapter.
+Adopt: keep PolicyDecision explicit/action-scoped and separate from ScientificAssessment/execution state.
 
-Do not infer: policy engines determine whether biological/statistical inference is identifiable.
+Do not infer: a policy engine determines scientific identifiability or evidence strength.
 
 ## 5. Scientific-Validity References
 
 ### DESeq2
-
-Source:
 
 - Love MI, Huber W, Anders S. *Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2*. Genome Biology 15, 550 (2014).
 - https://doi.org/10.1186/s13059-014-0550-8
@@ -162,168 +139,133 @@ Source:
 - inspection_depth: primary paper + official Bioconductor guidance
 - claim_scope: count semantics, design matrix, confounding/identifiability
 
-Adopt: TaskSpec/Module contracts expose design and input assumptions; authorized execution can still be `NOT_IDENTIFIABLE` or `INCOMPATIBLE`.
+Adopt: TaskSpec/Module contracts expose design/input assumptions; authorized execution can still be `NOT_IDENTIFIABLE` or `INCOMPATIBLE`.
 
 ### Gene Ontology enrichment guidance
-
-Source:
 
 - https://geneontology.org/docs/go-enrichment-analysis/
 - checked_at: 2026-09-17
 - inspection_depth: official guidance
-- claim_scope: selected gene set, background/reference universe, mapping/annotation provenance
+- claim_scope: selected set, reference/background universe, mapping/annotation provenance
 
-Adopt: background universe, annotation release, identifier mapping, and multiple testing are provenance-bearing scientific configuration.
+Adopt: tested/background universe, annotation release, identifier mapping, and multiple testing are scientific provenance/configuration.
 
 ### goseq / RNA-seq selection bias
-
-Source:
 
 - Young MD et al. *Gene ontology analysis for RNA-seq: accounting for selection bias*. Genome Biology 11, R14 (2010).
 - https://doi.org/10.1186/gb-2010-11-2-r14
 - checked_at: 2026-09-17
-- inspection_depth: primary-paper evidence
-- claim_scope: gene-selection bias such as transcript-length effects
+- inspection_depth: primary paper
+- claim_scope: gene-selection bias including transcript-length effects
 
-Adopt: enrichment method/background decisions may depend on how the tested gene set was generated.
+Adopt: enrichment method/background applicability may depend on how the gene set was generated.
 
-### Replicate-aware single-cell differential expression
-
-Source:
+### Replicate-aware single-cell DE
 
 - Squair JW et al. *Confronting false discoveries in single-cell differential expression*. Nature Communications 12, 5692 (2021).
 - https://doi.org/10.1038/s41467-021-25960-2
 - checked_at: 2026-09-17
 - inspection_depth: primary paper
-- claim_scope: biological-replicate/experimental-unit handling in multi-sample scRNA-seq DE
+- claim_scope: experimental-unit/biological-replicate handling in multi-sample scRNA-seq DE
 
-Adopt: bulk -> single-cell pathway reuse must re-evaluate experimental unit/statistical assumptions.
+Adopt: bulk -> single-cell pathway reuse must re-evaluate experimental unit/statistical assumptions and downstream evidence applicability.
 
 ## 6. Memory and Retrieval Research
 
 ### RAPTOR
 
-Source:
-
 - Sarthi P et al. *RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval*. arXiv:2401.18059 (2024).
 - https://arxiv.org/abs/2401.18059
 - checked_at: 2026-09-17
 - inspection_depth: paper
-- claim_scope: hierarchical representation/retrieval at multiple abstraction levels
+- claim_scope: multi-level hierarchical representation/retrieval
 
 Adopt: hierarchy can organize/expand retrieval; exact lookup need not traverse root-to-leaf.
 
 ### HippoRAG / HippoRAG 2
-
-Source:
 
 - https://github.com/OSU-NLP-Group/HippoRAG
 - checked_at: 2026-09-17
 - inspection_depth: repository/project material
 - claim_scope: graph/associative multi-hop retrieval
 
-Adopt: graph retrieval is a candidate strategy for distributed context.
+Adopt: candidate strategy for distributed research context.
 
-Do not infer: hard policy or fatal contradictions should be probabilistic top-k retrieval.
+Do not infer: hard policy/fatal contradictions should be probabilistic top-k retrieval.
 
 ### Agent Workflow Memory (AWM)
-
-Source:
 
 - *Agent Workflow Memory*. arXiv:2409.07429 (2024).
 - https://arxiv.org/abs/2409.07429
 - checked_at: 2026-09-17
 - inspection_depth: paper
-- claim_scope: reusable procedural routines induced from historical trajectories
+- claim_scope: reusable procedural routines from historical trajectories
 
-Adopt: supports Memory Pathway concept.
+Adopt: supports MemoryPathway concept.
 
 Do not infer: generic task frequency/reward equals scientific reliability.
 
 ### TiMEM
-
-Source:
 
 - https://github.com/TiMEM-AI/TiMEM
 - checked_at: 2026-09-17
 - inspection_depth: repository/project material
 - claim_scope: temporal/hierarchical long-horizon memory infrastructure
 
-Adopt: candidate Memory Provider; BioHarness retains evidence/scope/validity/Decision semantics.
+Adopt: candidate Memory Provider; BioHarness retains evidence/scope/lifecycle/Decision semantics.
 
 ### Graphiti
-
-Source:
 
 - https://github.com/getzep/graphiti
 - checked_at: 2026-09-17
 - inspection_depth: repository/project material
 - claim_scope: temporal graph relations and multi-hop retrieval
 
-Adopt: optional graph provider if real workload justifies it; not mandatory P0 infrastructure.
+Adopt: optional graph provider if workload justifies it; not mandatory P0 infrastructure.
 
 ## 7. Research-Agent and Literature Systems
 
 ### BioMedAgent
 
-Source:
-
 - https://www.nature.com/articles/s41551-026-01634-6
 - checked_at: 2026-09-17
-- inspection_depth: publication metadata/available article material + associated project resources; not a reproduced benchmark
-- claim_scope: biomedical agent combining tool use, analysis, and memory/retrieval
+- inspection_depth: publication metadata/available article material + associated project resources; benchmark not reproduced
+- claim_scope: biomedical agent combining tool use, analysis, memory/retrieval
 
-Adopt: comparison point for research-agent capability; BioHarness differentiation should be tested around evidence-grounded applicability, provenance, version change, governed promotion, and safe scientific reuse.
+Adopt: comparison point for agent capability; evaluate BioHarness on evidence-grounded applicability, provenance, version change, governed reuse/promotion.
 
 ### PaperQA2
-
-Source:
 
 - https://github.com/Future-House/paper-qa
 - checked_at: 2026-09-17
 - inspection_depth: repository/project material
 - claim_scope: evidence-preserving literature retrieval/answer generation
 
-Adopt: literature-derived memory should retain source identity/evidence location and remain distinct from experimental/provider evidence.
+Adopt: literature-derived memory retains source/evidence identity and remains distinct from provider/experimental evidence.
 
 ## 8. Concrete Research-Software Example: Schultz et al. 2026 EGT
-
-Source:
 
 - Schultz DT et al. *Topological mixing and irreversibility in animal chromosome evolution*. Science Advances 12, eadz5561 (2026).
 - checked_at: 2026-09-17
 - inspection_depth: uploaded paper methods/data-availability and architecture-relevant sections
-- claim_scope: composable research software, workflow orchestration, graph use, sensitivity/alternative-explanation validation
+- claim_scope: composable scientific software, Snakemake orchestration, graph use for a graph-shaped problem, sensitivity/alternative-explanation validation
 
-Observed architecture:
+Observed: separate `chrombase`, `genbargo`, `egt`, `chromsim`, `breakpointer2`; Snakemake orchestration; Neo4j used for a specific orthology/chromosome relationship problem; explicit alternative-explanation/sensitivity checks and GO-universe definition.
 
-- data/database construction: `chrombase`;
-- embargo handling: `genbargo`;
-- main analyses: `egt`;
-- simulation: `chromsim`;
-- inversion analysis: `breakpointer2`;
-- orchestration: Snakemake;
-- Neo4j for a specifically graph-shaped orthology/chromosome problem rather than universal storage.
+Adopt: keep scientific tools modular under reproducible orchestration; use graph infrastructure only for demonstrated graph-shaped needs; record method-specific sensitivity/alternative-explanation validation where relevant.
 
-Observed scientific design lessons:
-
-- homology-detection failure is audited as an alternative explanation;
-- taxonomic resampling tests sampling imbalance;
-- UMAP/sentinel sensitivity is tested;
-- GO enrichment uses an explicit family universe and is cross-checked with GOATOOLS.
-
-Adopt: research software can remain a modular ecosystem under a reproducible harness; material alternative explanations/sensitivity should be validated where method-specific.
-
-Do not infer: animal BCnS ALG biology transfers directly to plants or that BioHarness needs Neo4j in P0.
+Do not infer: animal-specific BCnS ALG biology transfers directly to plants or BioHarness requires Neo4j.
 
 ## 9. Internal Asset: Genome-web TF Nextflow Pilot
 
-Repository: https://github.com/mumu-140/genome-web-backend
-Branch inspected: `main`
-Checked: 2026-09-18
-Inspection depth: repository code + workflow configuration + README
+- Repository: https://github.com/mumu-140/genome-web-backend
+- branch observed: `main`
+- **pinned inspected commit:** `05072cbbcd533ca59afa13996d8d0edd8f939c6e`
+- checked_at: 2026-09-18
+- inspection_depth: repository code + workflow configuration + README
+- claim_scope: actual P0 launcher/executor/identity/provenance/validation capability boundary
 
-Files inspected directly:
+Files inspected:
 
 - `pipeline/nextflow/run.sh`
 - `pipeline/nextflow/scripts/run.py`
@@ -332,36 +274,30 @@ Files inspected directly:
 - `pipeline/nextflow/nextflow.config`
 - `pipeline/nextflow/README.md`
 
-Observed properties:
+Observed:
 
-- explicit species/UID/assembly/annotation registration;
-- leading-zero UID preservation;
+- explicit species/UID/build/annotation registration and leading-zero UID preservation;
 - table-based gene -> transcript -> protein resolution;
 - fail-fast identity/file/tool validation;
-- synchronous Python launcher;
-- local Nextflow executor in the inspected config;
-- per-run-root filesystem launch lock;
-- explicit non-reusable attempt directories;
+- synchronous Python launcher + local Nextflow executor;
+- per-run-root filesystem launch lock and explicit attempt directories;
 - deep Nextflow cache/resume;
 - tool/source fingerprints and invocation evidence;
-- candidate BUNDLE verification;
-- no automatic production publication;
-- resolved scientific inputs need additional BioHarness-owned member/manifest identity provenance.
+- candidate BUNDLE validation and no automatic production publication;
+- no provider-native idempotency key;
+- no durable async external execution ID/polling/cancellation interface in inspected source;
+- reconciliation after disconnect is limited;
+- resolved member/manifest identity needs additional BioHarness-adapter provenance.
 
-Adopt: use this as P0 because it already exercises identity, cache/reuse, failures, candidate validation, and publication boundary. Wrap it rather than rewrite its biological rules.
+Adopt: use as P0 because it exercises real identity, reuse, failures, validation boundary, and publication separation. Wrap it rather than rewrite its biological logic.
 
-Do not infer: provider-native async submission, distributed idempotency, exactly-once execution, remote scheduler support, or generic Nextflow capabilities.
+Do not infer: async remote submission, distributed idempotency, exactly-once execution, Slurm/Kubernetes support, or generic Nextflow capabilities.
 
 ## 10. Evaluation References and Directions
 
-Candidate directions:
+Design references include BixBench-style scientific/data-analysis evaluation, LongMemEval-style long-horizon memory evaluation, AgentDojo-style tool/adversarial evaluation, and benchmark-quality auditing such as BenchGuard-style contamination/validity checks.
 
-- BixBench — scientific/data-analysis task evaluation;
-- LongMemEval — long-horizon memory/update evaluation;
-- AgentDojo — tool-use/adversarial evaluation;
-- benchmark-quality auditing such as BenchGuard-style contamination/validity checks.
-
-Inspection status: design references only; BioHarness has not reproduced their headline results.
+BioHarness has not reproduced their headline results.
 
 Future matched-budget comparison should include:
 
@@ -373,23 +309,13 @@ vs human-authored reviewed pathways
 vs automatically proposed pathways
 ```
 
-Candidate outcomes:
-
-- correct scientific completion;
-- correct blocking/refusal for unsupported design;
-- stale-knowledge misuse;
-- repeated-error rate;
-- provenance completeness;
-- ambiguous-execution recovery;
-- contradiction handling;
-- independent-evidence accounting;
-- context/token/tool-call cost.
+Primary outcomes should emphasize scientifically correct completion **or correct blocking**, stale-knowledge misuse, repeated-error rate, provenance completeness, ambiguous-execution recovery, contradiction handling, independent-evidence accounting, and context/tool/token cost.
 
 This benchmark design remains a hypothesis until executed.
 
 ## 11. Maintenance Rule
 
-For every new source that materially changes architecture, record:
+For every source that materially changes architecture, record:
 
 1. exact source/link;
 2. source type;
@@ -398,6 +324,6 @@ For every new source that materially changes architecture, record:
 5. inspection depth;
 6. claim scope;
 7. BioHarness clause informed;
-8. what is deliberately not inferred.
+8. explicit non-inferences.
 
-Prefer primary papers, official specifications/documentation, original repositories, and directly inspected internal source over secondary summaries.
+Prefer primary papers, official specs/docs, original repositories, and directly inspected internal source over secondary summaries.
