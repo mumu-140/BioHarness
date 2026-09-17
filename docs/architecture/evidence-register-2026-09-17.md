@@ -49,10 +49,7 @@ Adopt:
 - computation and provenance graph are distinct;
 - persistent process state/recovery is a useful reference for Run/Attempt semantics.
 
-Do not infer:
-
-- that BioHarness should migrate all pipelines to AiiDA;
-- that provenance alone establishes scientific validity.
+Do not infer: BioHarness should migrate all pipelines to AiiDA or that provenance alone establishes scientific validity.
 
 ### Nextflow / nf-core
 
@@ -66,17 +63,9 @@ Sources:
 - inspection_depth: official docs/repository patterns; concrete Genome-web integration separately audited at source-code level
 - claim_scope: workflow execution, cache/resume, portable executors, module/workflow reuse
 
-Adopt:
+Adopt: keep Nextflow external as WorkflowExecutor; bind exact workflow/config/input/environment identity; reuse engine cache/resume.
 
-- keep Nextflow external as WorkflowExecutor;
-- bind exact workflow/config/input/environment identity to BioHarness state;
-- reuse engine cache/resume instead of creating another DAG engine.
-
-Do not infer:
-
-- that Nextflow cache identity equals BioHarness scientific identity;
-- that workflow completion equals validation PASS;
-- that every Nextflow integration exposes async/idempotent remote submission.
+Do not infer: Nextflow cache identity equals BioHarness scientific identity, workflow completion equals validation PASS, or every integration exposes async/idempotent remote submission.
 
 ### Snakemake
 
@@ -88,7 +77,7 @@ Source:
 - inspection_depth: paper/repository reference
 - claim_scope: alternative mature workflow engine and reproducible composition
 
-Adopt: normalize heterogeneous engines behind BioHarness contracts rather than force one workflow engine.
+Adopt: normalize heterogeneous workflow engines behind BioHarness contracts.
 
 ### OpenLineage
 
@@ -98,9 +87,9 @@ Source:
 - https://github.com/OpenLineage/OpenLineage
 - checked_at: 2026-09-17
 - inspection_depth: official docs/repository overview
-- claim_scope: event vocabulary for Job/Run/Dataset lineage
+- claim_scope: Job/Run/Dataset lineage vocabulary
 
-Adopt: reuse compatible event/lineage vocabulary where useful; add BioHarness scientific assessment, validation, Decision, and memory semantics above it.
+Adopt: reuse compatible lineage vocabulary where useful; add BioHarness scientific/validation/Decision/memory semantics above it.
 
 ### RO-Crate / Workflow Run RO-Crate
 
@@ -110,9 +99,9 @@ Sources:
 - https://www.researchobject.org/workflow-run-crate/
 - checked_at: 2026-09-17
 - inspection_depth: official specification/documentation
-- claim_scope: portable packaging of research objects and workflow-run metadata
+- claim_scope: portable research/workflow-run metadata packaging
 
-Adopt: prefer standards-compatible archive/export where practical.
+Adopt: prefer standards-compatible export/archive when practical.
 
 Do not infer: metadata packaging guarantees future availability of every external input/environment.
 
@@ -125,11 +114,9 @@ Source:
 - https://www.ga4gh.org/product/data-repository-service-drs/
 - checked_at: 2026-09-17
 - inspection_depth: official product/spec documentation
-- claim_scope: separation of stable logical identity from access location/mechanism
+- claim_scope: stable logical identity separated from access location/mechanism
 
-Adopt: use this separation as a reference for `ResolvedDataRef`, supplemented by assembly/annotation/identifier semantics and collection membership identity.
-
-Do not infer: DRS alone expresses all plant/genome-specific biological version semantics.
+Adopt: use as a reference for `ResolvedDataRef`, supplemented by biological release and collection-membership identity.
 
 ### GA4GH WES / TES / TRS
 
@@ -140,7 +127,7 @@ Sources:
 - https://www.ga4gh.org/product/tool-registry-service-trs/
 - checked_at: 2026-09-17
 - inspection_depth: official product/spec documentation
-- claim_scope: separation of workflow registry, workflow execution, and task execution concerns
+- claim_scope: workflow registry/execution/task boundary patterns
 
 Adopt: keep provider interfaces standards-alignable where reasonable.
 
@@ -160,7 +147,7 @@ Sources:
 
 Adopt: keep `PolicyDecision` separate from scientific feasibility and execution state; OPA may later be an adapter.
 
-Do not infer: a policy engine can determine whether a biological/statistical inference is identifiable.
+Do not infer: policy engines determine whether biological/statistical inference is identifiable.
 
 ## 5. Scientific-Validity References
 
@@ -172,13 +159,10 @@ Source:
 - https://doi.org/10.1186/s13059-014-0550-8
 - https://bioconductor.org/packages/DESeq2
 - checked_at: 2026-09-17
-- inspection_depth: primary paper + official Bioconductor guidance used for design/count semantics
+- inspection_depth: primary paper + official Bioconductor guidance
 - claim_scope: count semantics, design matrix, confounding/identifiability
 
-Adopt:
-
-- TaskSpec/Module contracts expose design and input assumptions;
-- authorized execution can still be `NOT_IDENTIFIABLE` or `INCOMPATIBLE`.
+Adopt: TaskSpec/Module contracts expose design and input assumptions; authorized execution can still be `NOT_IDENTIFIABLE` or `INCOMPATIBLE`.
 
 ### Gene Ontology enrichment guidance
 
@@ -198,8 +182,8 @@ Source:
 - Young MD et al. *Gene ontology analysis for RNA-seq: accounting for selection bias*. Genome Biology 11, R14 (2010).
 - https://doi.org/10.1186/gb-2010-11-2-r14
 - checked_at: 2026-09-17
-- inspection_depth: primary-paper evidence used for RNA-seq enrichment bias principle
-- claim_scope: selection bias such as transcript-length effects
+- inspection_depth: primary-paper evidence
+- claim_scope: gene-selection bias such as transcript-length effects
 
 Adopt: enrichment method/background decisions may depend on how the tested gene set was generated.
 
@@ -213,7 +197,7 @@ Source:
 - inspection_depth: primary paper
 - claim_scope: biological-replicate/experimental-unit handling in multi-sample scRNA-seq DE
 
-Adopt: bulk -> single-cell pathway reuse must re-evaluate experimental unit/statistical assumptions; graph topology alone cannot preserve old validity.
+Adopt: bulk -> single-cell pathway reuse must re-evaluate experimental unit/statistical assumptions.
 
 ## 6. Memory and Retrieval Research
 
@@ -225,7 +209,7 @@ Source:
 - https://arxiv.org/abs/2401.18059
 - checked_at: 2026-09-17
 - inspection_depth: paper
-- claim_scope: hierarchical representation and retrieval at multiple abstraction levels
+- claim_scope: hierarchical representation/retrieval at multiple abstraction levels
 
 Adopt: hierarchy can organize/expand retrieval; exact lookup need not traverse root-to-leaf.
 
@@ -284,14 +268,12 @@ Adopt: optional graph provider if real workload justifies it; not mandatory P0 i
 
 Source:
 
-- 2026 Nature Biomedical Engineering publication: https://www.nature.com/articles/s41551-026-01634-6
+- https://www.nature.com/articles/s41551-026-01634-6
 - checked_at: 2026-09-17
-- inspection_depth: publication metadata/available article material + associated project resources; not treated as a reproduced benchmark
+- inspection_depth: publication metadata/available article material + associated project resources; not a reproduced benchmark
 - claim_scope: biomedical agent combining tool use, analysis, and memory/retrieval
 
-Adopt: comparison point for research-agent capability.
-
-BioHarness differentiation to test: evidence-grounded applicability, provenance, version change, governed promotion, and safe scientific reuse rather than generic “agent + memory.”
+Adopt: comparison point for research-agent capability; BioHarness differentiation should be tested around evidence-grounded applicability, provenance, version change, governed promotion, and safe scientific reuse.
 
 ### PaperQA2
 
@@ -321,16 +303,16 @@ Observed architecture:
 - simulation: `chromsim`;
 - inversion analysis: `breakpointer2`;
 - orchestration: Snakemake;
-- Neo4j used for a specifically graph-shaped orthology/chromosome problem rather than universal storage.
+- Neo4j for a specifically graph-shaped orthology/chromosome problem rather than universal storage.
 
 Observed scientific design lessons:
 
-- homology-detection failure is explicitly audited as an alternative explanation;
+- homology-detection failure is audited as an alternative explanation;
 - taxonomic resampling tests sampling imbalance;
 - UMAP/sentinel sensitivity is tested;
 - GO enrichment uses an explicit family universe and is cross-checked with GOATOOLS.
 
-Adopt: research software can remain a modular ecosystem under a reproducible harness; validation should test material alternative explanations/sensitivity where method-specific.
+Adopt: research software can remain a modular ecosystem under a reproducible harness; material alternative explanations/sensitivity should be validated where method-specific.
 
 Do not infer: animal BCnS ALG biology transfers directly to plants or that BioHarness needs Neo4j in P0.
 
@@ -341,7 +323,7 @@ Branch inspected: `main`
 Checked: 2026-09-18
 Inspection depth: repository code + workflow configuration + README
 
-Files inspected directly for the P0 audit:
+Files inspected directly:
 
 - `pipeline/nextflow/run.sh`
 - `pipeline/nextflow/scripts/run.py`
