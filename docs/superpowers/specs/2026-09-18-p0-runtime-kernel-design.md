@@ -134,14 +134,13 @@ psycopg 3                PostgreSQL driver
 PostgreSQL               authoritative control-plane state
 Typer                    CLI
 pytest                   unit/contract/integration tests
-httpx                    future/provider HTTP seam where needed
 rfc8785                  RFC 8785 JSON canonicalization
 stdlib subprocess/pathlib/hashlib/json
 ```
 
 `rfc8785` is used rather than a custom canonical-JSON implementation. Hashing uses SHA-256 over explicit versioned projections.
 
-No Celery, Temporal, Redis, Kafka, Neo4j, pgvector, FastAPI, Slurm client, WES server, or generic DAG runtime is introduced in P0.
+No Celery, Temporal, Redis, Kafka, Neo4j, pgvector, FastAPI, HTTP client dependency, Slurm client, WES server, or generic DAG runtime is introduced in P0.
 
 ## 6. Repository Shape
 
@@ -240,6 +239,23 @@ The following records are append-only or revisioned rather than edited in place 
 
 `RunAttempt` has a mutable current-state projection for efficient inspection, but every meaningful transition also appends a `RunEvent`. Historical event rows are never rewritten.
 
+### 7.2 Minimum database constraints
+
+The relational schema must enforce the identities that protect execution semantics rather than relying only on application code:
+
+```text
+run_specs.run_spec_hash                         UNIQUE
+run_attempts(run_spec_id, attempt_number)      UNIQUE
+run_attempts.submission_key                    UNIQUE
+run_attempts.provider_attempt_name             UNIQUE within one configured P0 executor/run-root namespace
+run_events(run_attempt_id, sequence_no)        UNIQUE
+validation_profiles(profile_id, revision)      UNIQUE
+```
+
+`analysis_hash` is indexed but is not globally unique: two RunSpecs may intentionally share the same result-affecting analysis identity while preserving different control-plane context or validation plans.
+
+A RunAttempt state transition and its corresponding durable RunEvent append occur in the same PostgreSQL transaction. Application repositories do not expose generic update/delete methods for immutable record types.
+
 ## 8. Domain Identity and Hashing
 
 BioHarness uses two different hashes because scientific identity and whole-record integrity answer different questions.
@@ -317,9 +333,11 @@ provider revision
 
 The user-supplied/original manifest digest is retained separately from the provider-resolved manifest digest.
 
-Immediately before external launch, BioHarness re-verifies the frozen member identities. If a result-affecting member changed, the existing RunSpec is not launched. The task must be re-resolved/replanned into a new scientific identity.
+Immediately before external launch, BioHarness performs a fresh member-identity recheck outside the database lock/transaction. If a result-affecting member changed, the existing RunSpec is not submitted. The task must be re-resolved/replanned into a new scientific identity.
 
-The provider launcher performs its own validation again. BioHarness compares the launch attempt's `genomes.resolved.tsv` against the frozen planned identity. A mismatch is a provenance/identity failure, not a warning that may be ignored.
+The live P0 environment treats the configured Genome-web release inputs as read-only for the duration of a run. If a future provider cannot guarantee that operational property, its adapter must stage or otherwise bind an immutable input snapshot before claiming equivalent semantics.
+
+The provider launcher performs its own validation again. BioHarness compares the launch attempt's `genomes.resolved.tsv` against the frozen planned identity and rechecks member digests during collection. A mismatch is a provenance/identity validation failure, not a warning that may be ignored.
 
 ## 10. Scientific Assessment Boundary
 
@@ -367,15 +385,18 @@ aLRT
 seed
 MAFFT threads
 IQ-TREE threads
-Nextflow version contract
-Python/Biopython identity contract
-MAFFT/IQ-TREE executable fingerprints where known at plan time
+Nextflow version
+Python/Biopython identity
+MAFFT executable fingerprint
+IQ-TREE executable fingerprint
 validation-profile revision
 ReproducibilityContract
 planned environment/resource controls
 ```
 
-Planning may obtain tool fingerprints on the execution host before creating an executable RunSpec, or mark a requirement that must be satisfied and bound before launch. The executable RunSpec may not hide a result-affecting mismatch discovered later.
+For P0, planning occurs on the intended execution host and runs an environment probe before publishing an executable RunSpec. The exact Nextflow/Python/Biopython/MAFFT/IQ-TREE identities required by the current reproducibility contract are therefore bound before RunSpec publication. The launcher later records its own fingerprints, and collection/validation compares those observed identities against the frozen plan.
+
+If the execution host cannot satisfy or determine a required result-affecting identity, BioHarness does not publish an executable RunSpec for that configuration.
 
 RunSpec creation is an immutable publication step. Once created, changes to result-affecting input/configuration produce another RunSpec rather than updating the existing row.
 
@@ -383,10 +404,9 @@ RunSpec creation is an immutable publication step. Once created, changes to resu
 
 Each BioHarness-issued external launch is one RunAttempt. Provider/Nextflow internal retries remain within that RunAttempt. A new BioHarness resume/relaunch is a new RunAttempt even when compatible cached work is reused.
 
-Recommended P0 states:
+P0 attempt states are:
 
 ```text
-DRAFT
 SUBMITTING
 RUNNING
 COLLECTING
@@ -395,6 +415,8 @@ FAILED
 UNKNOWN
 NEEDS_OPERATOR_RECONCILIATION
 ```
+
+A RunAttempt is created only when BioHarness is actually preparing a concrete external submission, so P0 does not create a separate unused `DRAFT` attempt state. Planning state belongs to TaskSpec/Assessment/Configuration/RunSpec.
 
 P0 does not advertise `QUEUED`, `CANCELLING`, or `CANCELLED` because the audited provider exposes a synchronous local process and no durable cancellation interface.
 
@@ -431,19 +453,33 @@ A new attempt may be created only after the prior attempt's status has been esta
 
 ## 15. Launch Transaction Boundary
 
-External process creation cannot be made atomic with PostgreSQL, so P0 uses an explicit intent-before-side-effect protocol.
+External process creation cannot be made atomic with PostgreSQL, so P0 uses an explicit preflight + intent-before-side-effect protocol.
+
+### Phase 0: fresh launch preflight, no database lock
+
+Immediately before submission BioHarness:
+
+1. re-hashes/rechecks the frozen input members;
+2. verifies the planned provider/workflow revision and execution-environment fingerprints;
+3. verifies the configured run root remains isolated from protected production paths;
+4. produces a short-lived launch-preflight evidence record bound to the RunSpec identity.
+
+Failure here creates no external RunAttempt and no external side effect.
 
 ### Phase A: durable pre-submission transaction
 
-In one PostgreSQL transaction:
+In one short PostgreSQL transaction:
 
-1. lock the target RunSpec/attempt creation scope;
-2. confirm the RunSpec remains executable and input digests still match;
+1. lock the target RunSpec attempt-allocation scope;
+2. confirm the RunSpec is executable and the fresh preflight evidence matches its frozen identity;
 3. evaluate and persist the current launch PolicyDecision;
-4. create the RunAttempt in `SUBMITTING`;
-5. allocate its unique local `submission_key` and provider attempt name;
-6. append `AttemptCreated`, `AuthorizationChecked`, and `SubmissionIntentRecorded` events;
-7. commit.
+4. allocate the next attempt number under the unique `(run_spec_id, attempt_number)` constraint;
+5. create the RunAttempt in `SUBMITTING`;
+6. allocate its unique local `submission_key` and provider attempt name;
+7. append `AttemptCreated`, `AuthorizationChecked`, and `SubmissionIntentRecorded` events;
+8. commit.
+
+No large file hashing or external process call occurs while this transaction/lock is held.
 
 Only after this commit may the adapter create the external process.
 
@@ -451,7 +487,7 @@ Only after this commit may the adapter create the external process.
 
 The TF executor uses `subprocess.Popen` to invoke the existing Genome-web `run.sh`/launcher. It does not construct a raw `nextflow run` command itself.
 
-The adapter immediately records observable process binding evidence such as host identity, PID, command fingerprint, provider attempt name, and timestamps, then appends `ExternalProcessBound`/`ExecutionStarted` and moves the read model to `RUNNING`.
+The adapter immediately records observable process binding evidence such as host identity, PID, command fingerprint, provider attempt name, and timestamps, then appends `ExternalProcessBound`/`ExecutionStarted` and moves the read model to `RUNNING` in one state-plus-event transaction.
 
 ### Phase C: completion/ambiguity
 
@@ -639,7 +675,7 @@ Adapter semantics with fixtures/fakes:
 
 ### Integration tests
 
-Use PostgreSQL plus temporary filesystem and a deterministic fake/small launcher to test transaction boundaries, crash windows, artifact registration, and reconciliation.
+Use PostgreSQL plus temporary filesystem and a deterministic fake/small launcher to test transaction boundaries, concurrent attempt allocation, crash windows, artifact registration, and reconciliation.
 
 ### Live P0 acceptance run
 
