@@ -109,7 +109,13 @@ P0 stops before automatic production publication or canonical update.
 
 The current Genome-web pilot is explicitly treated as a synchronous local Nextflow integration. Slurm/SSH/Kubernetes and generic async exactly-once submission are later slices.
 
-## 6. Verification Language
+## 6. Consolidation Status
+
+The 2026-09-18 multi-perspective review and Genome-web source audit have already been folded back into the authoritative contracts. Their separate files remain only for rationale/audit history.
+
+The former `scenario-validation-addendum-2026-09-18.md` has been merged into the primary `scenario-validation-plan.md` and is no longer part of the final branch diff.
+
+## 7. Verification Language
 
 Use these terms consistently:
 
