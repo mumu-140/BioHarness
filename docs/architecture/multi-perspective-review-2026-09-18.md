@@ -52,7 +52,7 @@ It did identify ambiguities that needed consolidation before implementation.
 | R7 | AI/security | IMPORTANT | Open-world text could be mistaken for control instruction. | External/retrieved content is evidence/data, never control-plane authority by itself. |
 | R8 | governance | IMPORTANT | Canonical promotion could race. | CanonicalPointer update uses expected-revision atomic compare-and-swap. |
 | R9 | provenance | IMPORTANT | Composite dataset identity needed member-set identity. | ResolvedDataRef supports manifest/member identity/digests. |
-| R10 | evidence | IMPORTANT | Rolling docs/repositories lacked inspection provenance. | Evidence records should preserve check time, revision/version/date, and inspection depth when practical. |
+| R10 | evidence | IMPORTANT | Rolling docs/repositories lacked inspection provenance. | Evidence records preserve check time, revision/version/date, and inspection depth when practical. |
 | R11 | execution | MINOR | Workflow-engine internal retry and BioHarness attempt retry were conflated. | Engine retries remain inside one RunAttempt; new BioHarness launch/binding creates a new RunAttempt. |
 | R12 | terminology | MINOR | “validated candidate” could imply full scientific acceptance. | Validation is always typed/profile-scoped. |
 
@@ -84,7 +84,7 @@ During the review, corrective rules initially accumulated as successive ADR-styl
 
 That pattern is useful after released decisions have historical users, but it is unnecessary inside one draft change set because Git already preserves review history.
 
-The accepted optimization is therefore:
+Accepted optimization:
 
 ```text
 review finding
@@ -92,7 +92,7 @@ review finding
     -> keep review file only as rationale/audit history
 ```
 
-Future agents should read the authoritative files first and consult this record only when they need the design rationale.
+Future agents should read authoritative files first and consult this record only for design rationale.
 
 ## 6. Current Authority Mapping
 
@@ -101,7 +101,7 @@ Authoritative final semantics:
 - scientific/run/execution contracts -> `scientific-contracts-and-run-semantics.md`;
 - actual first provider slice -> `p0-genome-web-tf-vertical-slice.md`;
 - executable acceptance scenarios -> `scenario-validation-plan.md`;
-- memory-specific architecture -> the existing memory architecture records;
+- memory-specific architecture -> existing memory architecture records;
 - evidence sources -> `evidence-register-2026-09-17.md`.
 
 This review file does not override those documents.
