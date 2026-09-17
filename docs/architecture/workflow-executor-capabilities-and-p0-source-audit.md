@@ -5,12 +5,12 @@ Status: Source audit / non-authoritative rationale
 Runtime status: NOT_IMPLEMENTED
 Validation status: NOT_RUN
 
-> This file records what was observed in the current Genome-web TF Nextflow pilot and why the P0 contract was narrowed. Final execution semantics are integrated into `scientific-contracts-and-run-semantics.md` and `p0-genome-web-tf-vertical-slice.md`. This audit never participates in precedence resolution.
+> This file records what was observed in the current Genome-web TF Nextflow pilot and why P0 was narrowed. Final execution semantics live in `scientific-contracts-and-run-semantics.md` and `p0-genome-web-tf-vertical-slice.md`. This audit never participates in precedence resolution.
 
-## Sources Inspected
+## Inspected Source
 
 Repository: `mumu-140/genome-web-backend`
-Branch inspected: `main`
+Branch: `main`
 Checked: 2026-09-18
 Inspection depth: repository code + workflow configuration + README
 
@@ -27,17 +27,17 @@ Files:
 
 ```text
 run.sh
-  -> source existing Genome-web config
-  -> exec Python run.py
-      -> validate args and paths
+  -> source config
+  -> Python run.py
+      -> validate arguments/paths
       -> require Nextflow 25.10.4
-      -> fingerprint tools/workflow sources
+      -> fingerprint tools/sources
       -> acquire RUN_ROOT/.launch.lock
       -> create attempts/<attempt>
-      -> resolve/validate genomes manifest
+      -> resolve/validate manifest
       -> write invocation.json
       -> subprocess.run(nextflow ..., check=True)
-      -> require output/candidate/manifest.json
+      -> require candidate/manifest.json
 ```
 
 Inspected configuration:
@@ -49,25 +49,21 @@ executor.memory = 8 GB
 cache = deep
 ```
 
-The integration is therefore a synchronous local process launcher, not a generic async submit/poll service.
+Therefore the current integration is a synchronous local launcher, not a generic async submit/poll service.
 
-## Observed Identity, Resume, and Provenance
+## Identity, Resume, and Provenance
 
-- run-root filesystem lock serializes launches within one run root but is not distributed exactly-once execution;
-- `attempts/<attempt>` directories are explicit/non-reusable and map naturally to RunAttempt history;
-- `--resume` and `--resume <session>` are supported; explicit session lineage is preferable to implicit `last`;
-- `invocation.json` records command, versions, executable/source hashes, original manifest SHA256, and collision-check state;
-- BioHarness still needs its own resolved manifest/member identity record for the scientific inputs actually consumed.
+- the run-root filesystem lock is local protection, not distributed exactly-once execution;
+- explicit non-reusable attempt directories map naturally to RunAttempt history;
+- explicit resume session lineage is preferable to implicit `last` when available;
+- invocation evidence includes command, versions, tool/source fingerprints, original manifest SHA256, and collision-check state;
+- BioHarness still needs its own resolved manifest/member identity for the scientific inputs actually consumed.
 
 ## Validation Boundary
 
-BUNDLE/launcher candidate verification is useful provider-contract/artifact-integrity evidence.
-
-It does not by itself prove scientific interpretation, publication readiness, canonical acceptance, or BioHarness provenance completeness.
+BUNDLE/launcher verification is useful provider-contract/artifact-integrity evidence. It does not itself prove scientific interpretation, publication readiness, canonical acceptance, or BioHarness provenance completeness.
 
 ## Capability Conclusion
-
-For the inspected integration:
 
 ```text
 submission.mode               = synchronous_process
@@ -86,17 +82,17 @@ tool_fingerprints             = true
 resolved_manifest_digest      = adapter responsibility / not provider-emitted today
 ```
 
-These are observations about this concrete provider revision, not timeless claims about Nextflow.
+These observations apply to this concrete integration/revision, not to Nextflow in general.
 
 ## Consequences Integrated into Authoritative Docs
 
 1. WorkflowExecutor capabilities are revision-scoped and explicit.
-2. Core does not fabricate exactly-once/async-reconciliation guarantees.
+2. Core does not fabricate exactly-once or async-reconciliation guarantees.
 3. Uncertain execution may stop at `NEEDS_OPERATOR_RECONCILIATION`.
 4. Automated resume prefers explicit prior session lineage when available.
 5. BioHarness records resolved inputs actually consumed.
 6. Provider candidate PASS is typed validation evidence, not canonical approval.
-7. P0 validates local execution only; Slurm/SSH/Kubernetes are later slices.
+7. P0 validates local execution only; remote schedulers are later slices.
 
 ## Status
 
