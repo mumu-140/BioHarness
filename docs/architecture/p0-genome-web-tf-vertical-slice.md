@@ -1,28 +1,32 @@
 # BioHarness P0 Genome-web TF Vertical Slice
 
-Date: 2026-09-17
-Status: Design record v1 for review
+Date: 2026-09-18
+Status: Authoritative P0 design record
 Runtime status: NOT_IMPLEMENTED
 Scenario status: NOT_RUN
 
 ## 1. Purpose
 
-P0 should prove one complete BioHarness control loop using a real existing scientific workflow rather than synthetic infrastructure.
+P0 proves one real BioHarness control loop around an existing scientific workflow. It must exercise actual provider constraints rather than a hypothetical generic workflow service.
 
-The selected reference implementation is the existing Genome-web TF Nextflow pilot in:
+Reference implementation:
 
-- `mumu-140/genome-web-backend/pipeline/nextflow/README.md`
+- `mumu-140/genome-web-backend/pipeline/nextflow/run.sh`
+- `mumu-140/genome-web-backend/pipeline/nextflow/scripts/run.py`
+- `mumu-140/genome-web-backend/pipeline/nextflow/scripts/validate_genomes.py`
 - `mumu-140/genome-web-backend/pipeline/nextflow/main.nf`
+- `mumu-140/genome-web-backend/pipeline/nextflow/nextflow.config`
+- `mumu-140/genome-web-backend/pipeline/nextflow/README.md`
 
-BioHarness will **wrap and govern** this workflow. It will not rewrite its biological logic.
+BioHarness wraps and governs this workflow. It does not rewrite its biological logic.
 
 ## 2. Scientific Task
 
-P0 task:
+Task intent:
 
-> Build transcription-factor family phylogenies for one or more explicitly registered genomes, preserve exact species/UID/assembly/annotation identity, produce independently validated candidate artifacts, and stop before production publication.
+> Build transcription-factor family protein phylogenies for one or more explicitly registered genomes, preserve exact species/UID/assembly/annotation identity, produce auditable candidate artifacts, and stop before production publication.
 
-The P0 output intent is therefore:
+Output intent:
 
 ```text
 candidate
@@ -34,9 +38,43 @@ not:
 canonical / production-published
 ```
 
-## 3. Existing Workflow Stages
+The scientific TaskSpec does **not** hard-code ordinary workflow defaults such as `min_seqs`, IQ-TREE model, bootstrap values, seed, or thread count unless the request explicitly makes those part of the scientific question.
 
-The current Genome-web TF pilot already implements:
+## 3. Source-Observed Provider Behavior
+
+The current Genome-web pilot is a synchronous launcher around a local Nextflow executor.
+
+Observed launcher sequence:
+
+```text
+run.sh
+  -> load existing Genome-web config
+  -> exec Python run.py
+      -> validate arguments and protected paths
+      -> require Nextflow 25.10.4
+      -> fingerprint Python/Biopython, MAFFT, IQ-TREE, source files
+      -> acquire RUN_ROOT/.launch.lock
+      -> create unique attempts/<attempt>
+      -> validate/resolve genome manifest
+      -> write invocation.json
+      -> subprocess.run(nextflow ..., check=True)
+      -> require output/candidate/manifest.json
+```
+
+Current `nextflow.config` uses:
+
+```text
+process.executor = local
+executor.cpus = 4
+executor.memory = 8 GB
+cache = deep
+```
+
+Therefore P0 validates a **local synchronous WorkflowExecutor adapter**. It does not validate Slurm, SSH, Kubernetes, generic WES/TES, or distributed submission semantics.
+
+## 4. Existing Workflow Stages
+
+The scientific workflow remains:
 
 ```text
 registry/preflight
@@ -46,332 +84,340 @@ registry/preflight
     -> BUNDLE whole-batch candidate verification
 ```
 
-Existing biological rules include:
+Existing provider rules that BioHarness must preserve include:
 
-- no implicit species, UID, assembly, annotation, or output defaults;
-- `gene -> transcript -> protein` resolution by explicit tables rather than guessed ID suffixes;
-- one representative protein per gene/family using explicit selection rules;
-- only families below the explicit sequence threshold may be skipped;
-- missing files, identity errors, and tool failures fail the batch;
+- no implicit species/UID/assembly/annotation/output defaults;
+- gene -> transcript -> protein joins by explicit tables, not guessed suffixes;
+- one representative protein per gene/family according to provider logic;
+- only explicitly threshold-ineligible families may be skipped;
+- identity, missing-file, and tool failures fail the batch;
+- leading-zero UID identity is preserved;
 - candidate outputs remain separate from production publication.
 
-BioHarness P0 must preserve these rules as provider behavior.
+## 5. ScientificTaskSpec
 
-## 4. BioHarness Mapping
-
-### 4.1 Data Provider
-
-Genome-web remains authoritative for biological registration and source-data identity.
-
-Each registered genome resolves to `ResolvedDataRef` objects for at least:
-
-- gene table;
-- transcript table;
-- protein table;
-- protein FASTA;
-- TF table;
-- TF-gene table;
-- assembly identity;
-- annotation release identity.
-
-### 4.2 ScientificTaskSpec
-
-Conceptual P0 task spec:
+Conceptual P0 TaskSpec:
 
 ```yaml
 scientific_task_spec:
-  question: build TF-family phylogenies for registered genomes
+  question: build TF-family protein phylogenies for registered genomes
   requested_inference: family-level protein phylogeny
   analysis_class: tf_phylogeny
   biological_scope:
-    genomes: [explicitly_resolved_refs]
-  representative_sequence_rule: provider_defined
-  min_family_sequences: 4
+    genomes: [explicitly_resolved_registered_genomes]
   output_intent: candidate
   unresolved_fields: []
 ```
 
-If any required biological identity field is unresolved, the task must not enter governed execution.
+If required biological identity is unresolved, governed execution does not begin.
 
-### 4.3 ScientificAssessment
+## 6. ScientificAssessment
 
-P0 assessment checks include:
+P0 pre-execution assessment checks include:
 
-- required source tables exist and are non-empty;
-- IDs are internally consistent according to the provider contract;
-- protein FASTA and protein table satisfy the existing Genome-web identity contract;
-- TF input belongs to the registered genome rather than a mixed genome table;
-- exact UID identity is preserved as a string;
-- requested analysis does not imply automatic tree rooting or unsupported biological inference.
+- required source tables/files exist and are non-empty;
+- manifest/table species and UID identity are consistent;
+- protein/TF inputs belong to the registered genome;
+- five-digit UID identity is preserved as a string;
+- cross-UID collisions are handled by the provider contract rather than auto-renaming;
+- the requested task does not imply unsupported rooting or downstream biological claims.
 
 Possible outcomes:
 
 ```text
-SUPPORTED
-INCOMPATIBLE
+ANALYSIS_SUPPORTED
+ANALYSIS_SUPPORTED_WITH_LIMITATIONS
 UNRESOLVED
+INCOMPATIBLE
 ```
 
-### 4.4 PolicyDecision
+This assessment means the analysis is supportable; it is not evidence that a biological hypothesis is true.
 
-P0 policy allows:
+## 7. ResolvedConfiguration
 
-- reading registered Genome-web source data;
-- creating an isolated RunSpec;
-- submitting the existing Nextflow candidate workflow;
-- registering candidate Artifacts and ValidationReports.
+P0 configuration freezes result-affecting executable choices, including:
 
-P0 policy does **not** automatically allow:
-
-- production database publication;
-- canonical pointer update;
-- overwriting historical artifacts;
-- silent relaxation of identity or validation rules.
-
-### 4.5 ResolvedConfiguration
-
-The configuration freezes:
-
-- exact workflow revision;
-- Nextflow/runtime revision where recorded;
-- Python/Biopython identity;
-- MAFFT executable/version/fingerprint;
-- IQ-TREE executable/version/fingerprint;
+- exact workflow/provider revision;
+- representative-sequence provider rule;
 - `min_seqs`;
 - MAFFT parameters;
-- IQ-TREE model/bootstrap/aLRT/seed/thread parameters;
-- explicit input references;
-- output/candidate location owned by the attempt.
+- IQ-TREE model/bootstrap/aLRT/seed parameters;
+- thread/resource settings;
+- Python/Biopython identity;
+- MAFFT and IQ-TREE executable/version fingerprints;
+- Nextflow/runtime identity;
+- input bindings;
+- validation profile;
+- reproducibility expectations.
 
-## 5. RunSpec and RunAttempt
+Current provider defaults are configuration, not scientific intent.
 
-A P0 `RunSpec` identifies one intended scientific computation.
+## 8. Resolved Input Provenance
 
-A parameter or input change that affects results creates a new RunSpec.
+Genome-web remains authoritative for source biological registration.
+
+P0 records both the original request/manifest identity and the actual resolved inputs consumed by Nextflow.
+
+Target provenance chain:
+
+```text
+registered biological resource
+    -> original manifest identity
+        -> resolved manifest Artifact/digest
+            -> per-genome ResolvedDataRef
+                -> six resolved scientific input files
+```
+
+Per genome, these include at least:
+
+- gene TSV;
+- transcript TSV;
+- protein TSV;
+- protein FASTA;
+- TF TSV;
+- TF-gene TSV;
+- species ID;
+- five-digit UID;
+- genome build;
+- annotation release;
+- release ID.
+
+The current provider records a digest of the original manifest and uses Nextflow deep caching, but BioHarness provenance must independently register/check the resolved manifest/member identity actually consumed.
+
+## 9. WorkflowExecutor Capability Snapshot
+
+P0 adapter declares capabilities for the concrete provider revision.
+
+Expected current shape:
+
+```yaml
+workflow_executor_capabilities:
+  provider: genome-web-tf-nextflow-pilot
+  provider_revision: exact-source-revision
+  submission:
+    mode: synchronous_process
+    native_idempotency_key: false
+    durable_external_execution_id: limited
+  observation:
+    poll: limited
+    reconcile_after_disconnect: limited
+    logs: true
+    trace: true
+  retry_resume:
+    engine_resume: true
+    explicit_resume_identity: supported_if_session_captured
+  cancellation:
+    supported: provider_specific
+  compute:
+    backend: local
+    remote_scheduler: false
+  provenance:
+    invocation_record: true
+    source_hashes: true
+    tool_fingerprints: true
+    resolved_manifest_digest: adapter_required
+```
+
+The adapter must not claim generic Nextflow capabilities that this integration does not expose.
+
+## 10. RunSpec and RunAttempt
+
+One immutable `RunSpec` identifies intended scientific/computational work.
 
 Examples:
 
 ```text
-same inputs + same scientific parameters + infrastructure retry
+same inputs + same result-affecting configuration + new execution retry
     -> same RunSpec, new RunAttempt
 
 same alignments + changed IQ-TREE model/bootstrap
     -> new RunSpec
 
-changed proteome content
+changed proteome/member identity
     -> new RunSpec
 ```
 
-A `RunAttempt` binds one RunSpec to one concrete Nextflow launch.
+Each BioHarness external launch/binding is a new `RunAttempt`.
 
-The existing Genome-web `attempt01`, `attempt02 --resume` concept maps naturally to BioHarness RunAttempts, but BioHarness must not assume filesystem attempt naming alone is a globally stable identity.
+The provider's `attempts/<attempt>` directory maps naturally to attempt identity, but filesystem naming alone is not the global BioHarness identity.
 
-## 6. Artifact Model
+Nextflow process retries within one bound launch remain internal execution provenance, not new BioHarness RunAttempts.
 
-Candidate outputs are registered as immutable Artifacts or artifact collections.
+A new `--resume` launch issued by BioHarness is a new RunAttempt even if it reuses prior Nextflow work/cache.
 
-Examples:
+## 11. Current Authorization Before Side Effects
 
-- representative-protein input bundles;
+Historical ContextSnapshot/PolicyDecision is stored for reproducibility.
+
+Before P0 launches a workflow or performs any later publication/canonical mutation, BioHarness checks current actor/policy authorization again.
+
+P0 allows, subject to current policy:
+
+- reading registered Genome-web source data;
+- creating TaskSpec/assessment/configuration/RunSpec;
+- launching the candidate workflow;
+- registering candidate Artifacts;
+- recording typed ValidationReports and MemoryCandidates.
+
+P0 does not automatically allow:
+
+- production loader execution;
+- production DB/path mutation;
+- canonical pointer update;
+- historical artifact overwrite;
+- relaxation of provider identity/validation rules.
+
+## 12. Failure, Retry, and Uncertain Execution
+
+### Provider failure after partial work
+
+Expected:
+
+- current RunAttempt becomes failed;
+- historical attempt remains immutable;
+- compatible Nextflow cache may be reused by a later RunAttempt when RunSpec identity is unchanged.
+
+### Lost/uncertain launcher outcome
+
+Because the current provider is synchronous/local and lacks a generic durable submit/poll API, BioHarness must not fabricate exactly-once semantics.
+
+Possible evidence for reconciliation includes:
+
+- attempt directory;
+- `invocation.json`;
+- Nextflow log/trace/session metadata;
+- candidate manifest;
+- launcher/run-root lock/process state when observable.
+
+If available evidence cannot establish the prior execution outcome safely:
+
+```text
+UNKNOWN -> NEEDS_OPERATOR_RECONCILIATION
+```
+
+Blind duplicate submission is forbidden.
+
+### Resume identity
+
+Automated resume should bind to an explicit prior Nextflow session/run identity when available.
+
+Implicit `-resume` / `last` is not scientific identity and should not be treated as such.
+
+## 13. Artifact Model
+
+Candidate outputs are registered as immutable Artifacts or artifact collections, including where applicable:
+
+- representative-protein bundles;
 - alignments;
 - tree outputs;
 - per-family execution metadata;
 - audit tables;
 - candidate manifest;
 - final candidate TF-tree tables;
-- Nextflow trace/log evidence.
+- resolved manifest;
+- Nextflow invocation/log/trace/session evidence.
 
-The existing candidate bundle's `NOT_AUTHORIZED` publication marker remains meaningful evidence of publication boundary.
+Reused cached work retains lineage to the prior content/execution evidence instead of being presented as newly recomputed work.
 
-## 7. ValidationReport
+## 14. Typed Validation
 
-The P0 validation step is separate from workflow completion.
+Execution completion and provider `PASS candidate=...` do not mean universal scientific validation.
 
-A successful Nextflow process graph can still yield a failed candidate validation.
-
-Validation should record at least:
-
-- input identity consistency;
-- expected output membership;
-- per-family available/skipped status;
-- actual tool provenance for available families;
-- candidate manifest integrity;
-- corruption/missing-output checks;
-- whole-batch validation outcome.
-
-Possible outcomes:
+Illustrative mapping:
 
 ```text
-PASS
-PASS_WITH_LIMITATIONS
-FAIL
-INCONCLUSIVE
+provider input/preflight checks
+    -> ValidationReport(kind=provider_contract)
+
+BUNDLE candidate verifier
+    -> ValidationReport(kind=artifact_integrity/provider_contract)
+
+BioHarness input/provenance audit
+    -> ValidationReport(kind=provenance_completeness)
+
+future scientific review
+    -> separate method_qc/scientific_assumptions reports
+
+future production release
+    -> separate publication_readiness profile
 ```
 
-Only an explicit `PASS`/accepted candidate may become eligible for a later Decision.
+P0 candidate ValidationProfile should at minimum require the provider/candidate integrity and provenance dimensions explicitly defined by implementation.
 
-## 8. Publication Boundary
+A technically valid candidate remains non-canonical and non-published until a later governed Decision/gate.
 
-P0 stops at:
+## 15. Parameter-Local Reuse
 
-```text
-validated candidate artifact
-```
-
-It does not perform:
-
-- loader execution against production biological tables;
-- production path switching;
-- API publication;
-- canonical release pointer update.
-
-A later publication workflow would require its own PolicyDecision, ValidationReport requirements, and Decision.
-
-## 9. Required Failure and Recovery Cases
-
-### 9.1 Leading-zero UID
-
-Input:
-
-```text
-00902
-```
-
-Expected:
-
-- preserve exact string identity;
-- never coerce to `902`;
-- all downstream provider/artifact references retain `00902`.
-
-Forbidden behavior:
-
-- numeric normalization that changes biological/provider identity.
-
-### 9.2 Cross-UID identity conflict
-
-Expected:
-
-- ScientificAssessment = `INCOMPATIBLE` or provider preflight failure;
-- no governed submission;
-- record a failure lesson candidate only when the evidence is clear and scoped.
-
-Forbidden behavior:
-
-- auto-renaming scientific IDs to force execution.
-
-### 9.3 All families skipped by explicit threshold
-
-Expected:
-
-- workflow may still produce a complete, auditable candidate package describing all-skipped status if the provider contract permits it;
-- BioHarness must not mislabel this as an execution disappearance/failure simply because no MAFFT/IQTREE tasks ran.
-
-Scientific interpretation remains distinct from execution validity.
-
-### 9.4 Tool failure after partial progress
-
-Expected:
-
-- current attempt becomes `FAILED`;
-- no production publish;
-- retained work/cache may be reused in a new attempt if provider semantics support resume and RunSpec identity is unchanged.
-
-### 9.5 Corrupted candidate bundle
-
-Expected:
-
-- external execution may be `FINISHED`;
-- ValidationReport = `FAIL`;
-- Artifact is retained for audit if policy allows;
-- candidate cannot be promoted.
-
-### 9.6 Lost external submission acknowledgement
-
-Expected:
-
-```text
-SUBMITTING -> UNKNOWN
-```
-
-BioHarness must reconcile provider state before any resubmission.
-
-Forbidden behavior:
-
-- creating duplicate expensive jobs solely because the acknowledgement was lost.
-
-### 9.7 IQ-TREE-only parameter change
-
-Expected:
-
-- new RunSpec because result-affecting parameters changed;
-- prior compatible alignments may be reusable through provider caching/content identity;
-- phylogeny and downstream candidate bundle are recomputed/revalidated.
-
-Forbidden behavior:
-
-- reusing an old tree under the new parameter identity.
-
-### 9.8 Protein-set change affecting one family
+### IQ-TREE-only result-affecting change
 
 Expected:
 
 - new RunSpec;
-- provider-level content caching may reuse scientifically identical family outputs where its cache key proves equivalence;
-- affected family alignment/tree and whole candidate bundle are recomputed/revalidated.
+- scientifically identical MAFFT outputs may be reused through provider content caching;
+- IQ-TREE and downstream candidate validation are recomputed/revalidated;
+- old tree is never relabelled as generated under the new parameters.
 
-BioHarness records the reused provenance rather than pretending the entire Run was newly computed from scratch.
+### Protein/member change affecting one family
 
-## 10. Memory Feedback
+Expected:
 
-P0 should exercise a minimal evidence-backed memory loop.
+- new RunSpec;
+- provider cache may reuse outputs whose content identity proves equivalence;
+- affected family alignment/tree and whole-batch candidate validation are recomputed/revalidated;
+- reused provenance remains explicit.
 
-Candidate memory examples:
+## 16. Memory Feedback
 
-- a particular identity conflict pattern repeatedly causes provider preflight failure;
-- a specific tool/version combination is incompatible with the workflow contract;
-- a resume strategy succeeds/fails under an explicitly recorded condition;
-- a candidate validation failure identifies a reproducible corruption pattern.
+P0 exercises only a minimal governed memory loop.
 
-Memory must link to:
+Eligible MemoryCandidate examples:
 
-- RunSpec;
-- RunAttempt(s);
-- relevant Artifact/log;
-- ValidationReport;
-- provider/software versions.
+- repeatable identity/preflight failure pattern;
+- tool/version incompatibility;
+- explicit resume limitation/success condition;
+- reproducible candidate corruption pattern.
 
-P0 does not automatically promote these into Method or Lab policy.
+Memory links back to RunSpec, RunAttempt, Artifact/log evidence, ValidationReport, and provider/software revision.
 
-## 11. What P0 Does Not Test Yet
+Memory can influence a later Context/assessment/configuration proposal. It does not automatically become Method/Lab Policy.
+
+## 17. P0 Acceptance Criteria
+
+Fresh executable evidence is required before P0 can be described as implemented/validated.
+
+Acceptance requires demonstrating:
+
+1. exact registered data and resolved member identity are frozen/checkable;
+2. TaskSpec remains scientific intent while method parameters live in ResolvedConfiguration;
+3. pre-execution ScientificAssessment uses analysis-feasibility semantics;
+4. the existing Genome-web workflow is invoked through an adapter rather than copied into BioHarness Core;
+5. the adapter publishes a truthful revision-scoped capability snapshot;
+6. RunSpec and RunAttempt identity remain distinct;
+7. current authorization is evaluated before each new side effect;
+8. provider/engine internal retries are distinguishable from new BioHarness RunAttempts;
+9. uncertain execution can remain `UNKNOWN/NEEDS_OPERATOR_RECONCILIATION` without blind resubmission;
+10. typed validation prevents provider PASS from becoming universal validation;
+11. parameter-local reuse is visible and provenance-preserving;
+12. candidate artifacts remain non-production without a later explicit gate;
+13. one validated failure/compatibility lesson can become a scoped MemoryCandidate and affect later context without becoming Policy.
+
+## 18. Out of Scope for P0
 
 P0 does not establish correctness of:
 
-- RNA-seq differential-expression contracts;
-- GO enrichment contracts;
+- RNA-seq/GO scientific contracts beyond scenario design;
 - automatic Memory Pathway mining;
 - project closeout consolidation;
-- dedicated graph-database performance;
-- cross-project method-scope promotion;
+- graph-database performance;
+- cross-project scope promotion;
 - Web UI behavior;
-- production publication pipeline.
+- production publication;
+- Slurm/SSH/Kubernetes execution;
+- distributed locks;
+- generic WES/TES compatibility;
+- provider-native exactly-once submission guarantees.
 
-These remain separate later slices.
-
-## 12. P0 Acceptance Criteria
-
-P0 implementation is acceptable only when fresh executable evidence shows all of the following:
-
-1. exact registered data identity is frozen into a RunSpec;
-2. an existing Genome-web Nextflow workflow is invoked through a provider adapter rather than copied into core;
-3. RunSpec and RunAttempt identities are distinct;
-4. lost acknowledgement can enter reconciliation without blind duplicate submission;
-5. an external `FINISHED` execution can still fail ValidationReport;
-6. candidate artifacts remain non-production until an explicit later gate;
-7. parameter-local invalidation/reuse behavior is observable and provenance-preserving;
-8. at least one validated failure/compatibility lesson can become a scoped MemoryCandidate;
-9. that MemoryCandidate can affect a later Context without silently becoming Policy.
-
-## 13. Current Status
+## 19. Current Status
 
 ```text
 architecture = DESIGNED
