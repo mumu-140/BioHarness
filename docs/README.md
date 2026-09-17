@@ -1,162 +1,130 @@
 # BioHarness Documentation Map
 
 Date: 2026-09-18
-Status: Authoritative navigation and precedence record
+Status: Authoritative navigation record
 
-BioHarness is currently in the **architecture and validation-design phase**. The repository does not yet contain a BioHarness runtime implementation. Any scenario marked as an acceptance test or validation case is therefore a future executable specification unless an explicit Run record says otherwise.
+BioHarness is currently in the architecture and validation-design phase. Runtime implementation does not yet exist in this repository.
 
-## 1. Document Classes
+## 1. Read These First
 
-BioHarness documentation is divided into five classes.
+Future contributors and agents should normally read BioHarness in this order:
 
-### Core architecture spec
+1. `docs/superpowers/specs/2026-09-17-bioharness-architecture-design.md`
+   - stable product boundary and core Research Control Plane model.
+2. `docs/architecture/scientific-contracts-and-run-semantics.md`
+   - authoritative scientific intent, feasibility, authorization, data identity, RunSpec/RunAttempt, provider capability, validation, reproducibility, canonical-state, and context contracts.
+3. `docs/architecture/p0-genome-web-tf-vertical-slice.md`
+   - authoritative first implementation slice using the actual current Genome-web TF Nextflow provider.
+4. `docs/architecture/scenario-validation-plan.md`
+   - authoritative executable-spec catalog; all scenarios remain `NOT_RUN` until implementation executes them.
+5. Memory-specific architecture records when needed:
+   - `docs/architecture/provider-composition-and-research-memory.md`
+   - `docs/architecture/hierarchical-associative-memory.md`
+   - `docs/architecture/memory-pathway-consolidation-and-promotion.md`
+
+This path is intentionally short. A future implementation should not need to traverse multiple same-PR correction records to discover the final meaning of a contract.
+
+## 2. Document Classes
+
+### Core architecture
 
 - `docs/superpowers/specs/2026-09-17-bioharness-architecture-design.md`
 
-Defines the stable product boundary: a headless research control plane, provider/adapter architecture, governed Runs and Artifacts, evidence-backed Research Memory, and explicit Decision/Policy promotion.
+Defines the stable product boundary: headless Research Control Plane, provider/adapter architecture, governed computation, evidence/provenance, and research-memory feedback.
 
-### Architecture decision records
+### Authoritative focused contracts
 
-Focused records refine or override narrow semantics without replacing the entire core architecture.
-
-Current records:
-
-- `docs/architecture/provider-composition-and-research-memory.md`
-- `docs/architecture/hierarchical-associative-memory.md`
-- `docs/architecture/memory-pathway-consolidation-and-promotion.md`
 - `docs/architecture/scientific-contracts-and-run-semantics.md`
-- `docs/architecture/multi-perspective-review-2026-09-18.md`
-- `docs/architecture/workflow-executor-capabilities-and-p0-source-audit.md`
+- `docs/architecture/p0-genome-web-tf-vertical-slice.md`
+- `docs/architecture/scenario-validation-plan.md`
+- memory architecture records listed above.
 
-### Evidence and reference records
+These files contain current normative design semantics for their scope.
+
+### Evidence/reference records
 
 - `docs/architecture/reference-architectures.md`
 - `docs/architecture/evidence-register-2026-09-17.md`
 
-These files document external systems, papers, standards, and internal projects that inform the design. They are evidence catalogs, not implementation dependencies by default.
+These document external systems, papers, standards, and internal projects used to inform design. Evidence records do not override BioHarness contracts by themselves.
 
-### Validation records
+### Review/audit records
 
-- `docs/architecture/p0-genome-web-tf-vertical-slice.md`
-- `docs/architecture/scenario-validation-plan.md`
-- `docs/architecture/scenario-validation-addendum-2026-09-18.md`
+- `docs/architecture/multi-perspective-review-2026-09-18.md`
+- `docs/architecture/workflow-executor-capabilities-and-p0-source-audit.md`
 
-These define concrete scenarios and expected behavior. Unless explicitly updated with fresh execution evidence, their status is `NOT_RUN`.
+These preserve why the contracts were changed and what sources were inspected. They are non-authoritative rationale records. Final rules have been integrated into the authoritative contract/P0/validation documents.
 
-### Implementation/documentation plans
+### Plans
 
 - `docs/superpowers/plans/`
 
-Plans describe intended work. A plan is not proof that the described capability exists.
+Plans describe intended work. A plan is never proof that the described capability exists.
 
-## 2. Precedence Rule
+## 3. Conflict Rule
 
-When two architecture records appear to conflict, apply the following rule:
+When records appear to conflict:
 
-1. explicit hard constraints in the core architecture remain active unless a later decision record explicitly names and supersedes that clause;
-2. a later focused decision record overrides an older record only for the semantic issue it explicitly changes;
-3. all non-conflicting older design decisions remain active;
-4. evidence/reference records never override BioHarness policy or contracts by themselves;
-5. implementation behavior is authoritative only when backed by the implemented contract, tests, and recorded execution evidence.
+1. the core architecture defines stable system boundaries;
+2. an authoritative focused contract controls its explicit domain;
+3. memory-specific records control memory semantics unless the scientific/run contract explicitly constrains a cross-cutting safety/scientific rule;
+4. review/audit/evidence/plan files do not override authoritative contracts;
+5. implementation behavior becomes authoritative only when backed by implemented contracts, tests, and fresh execution evidence.
 
-This avoids silently rewriting history while allowing the architecture to become more precise.
+Git history preserves how decisions evolved; normal readers should use the final authoritative documents rather than reconstructing that history from old review wording.
 
-## 3. 2026-09-17 Scientific-Contract Hardening
+## 4. Stable Architecture
 
-`docs/architecture/scientific-contracts-and-run-semantics.md` is the authoritative decision record for the following issues, subject to the narrower 2026-09-18 corrections listed below:
+The following remain active:
 
-- distinguishing authorization from scientific validity;
-- freezing scientific intent before workflow planning;
-- reproducible logical-to-physical data identity;
-- dependency-aware invalidation and revalidation;
-- separating analysis identity from execution attempts;
-- idempotent external submission and unknown-state reconciliation;
-- separating deterministic required context from semantic memory retrieval;
-- distinguishing repeated executions from independent scientific evidence;
-- treating valid null/negative results as successful scientific outcomes.
+- BioHarness is headless; Web is a client/workbench, not a scientific source of truth.
+- Mature scientific algorithms and workflow engines remain external providers whenever practical.
+- Genome-web remains an authoritative biological Data Provider rather than being copied into BioHarness.
+- Official computation is governed and historical Run/Artifact evidence is immutable by default.
+- Scientific intent, analysis feasibility, authorization, execution completion, validation, Finding/interpretation, and canonical publication are distinct.
+- Authoritative state, derived Research Memory, and ephemeral model context are distinct.
+- Memory cannot directly become Policy or Canonical state.
+- Memory activation, maturity, and scope are separate dimensions.
+- Project closeout consolidates/cools memory rather than deleting scientific history.
+- Graph/vector infrastructure remains optional until real workload proves value.
 
-Where the older records conflict with these points, the scientific-contract record wins.
-
-In particular, the following older interpretations are superseded:
-
-- a single precedence ladder must not be used to decide scientific truth merely because it is useful for configuration/authority resolution;
-- a declared adaptive-slot mutation is not automatically low-impact; revalidation is determined by scientific dependency impact;
-- partial thawing is not determined only by graph topology; affected downstream assumptions and artifacts must be revalidated according to explicit impact contracts.
-
-## 4. 2026-09-18 Multi-Perspective Review Corrections
-
-`docs/architecture/multi-perspective-review-2026-09-18.md` is the current authoritative decision record for these narrower corrections:
-
-- historical PolicyDecision/ContextSnapshot explains a past action but does not authorize a new present-day side effect after authority changes;
-- RunSpec carries stable analysis identity, while external submission idempotency/submission keys are RunAttempt-scoped;
-- pre-execution `ScientificAssessment` uses analysis-feasibility semantics such as `ANALYSIS_SUPPORTED`, not result/hypothesis-support semantics;
-- ordinary method parameters such as P0 `min_seqs` belong to ResolvedConfiguration unless the research question explicitly fixes them;
-- ValidationReports are typed and gates are defined by ValidationProfiles rather than one generic PASS;
-- stochastic/nondeterministic computation declares a ReproducibilityContract and expected equivalence level;
-- retrieved literature/memory/provider/tool content is evidence/data and cannot itself mutate Policy, grant authority, or become a control-plane command;
-- CanonicalPointer updates use revision-checked atomic mutation rather than unguarded last-writer-wins;
-- collection data identity includes stable membership/manifest identity when provider membership can change;
-- architecture evidence records preserve inspection provenance/version/date when practical;
-- provider-internal task retries and BioHarness RunAttempts are distinct lifecycle layers.
-
-The accompanying executable-spec additions are in `docs/architecture/scenario-validation-addendum-2026-09-18.md` and remain `NOT_RUN`.
-
-`docs/architecture/workflow-executor-capabilities-and-p0-source-audit.md` further narrows execution-provider assumptions using the actual Genome-web TF launcher/source: provider capabilities are revision-scoped and must be declared honestly; the current P0 uses Nextflow's local executor and synchronous launcher rather than claiming a generic remote submit/poll service; unsupported reconciliation remains explicit; automated resume should bind explicit session lineage when feasible; and BioHarness must register the resolved scientific inputs actually consumed.
-
-## 5. Stable Architecture That Remains Active
-
-The following existing principles remain unchanged:
-
-- BioHarness is headless and the Web is a client/workbench, not the scientific source of truth;
-- mature scientific algorithms and workflow engines remain external whenever practical;
-- Genome-web remains an authoritative biological Data Provider rather than being copied into BioHarness;
-- official computation is governed and historical Run/Artifact evidence is immutable by default;
-- execution success and scientific validity are independent;
-- authoritative state, derived Research Memory, and ephemeral model context are distinct;
-- Memory cannot directly promote itself into Policy or Canonical state;
-- Memory Pathway activation, maturity, and scope are independent dimensions;
-- project completion cools or consolidates memory rather than deleting scientific history;
-- dedicated graph/vector infrastructure remains optional until demonstrated workload justifies it.
-
-## 6. Current P0 Direction
-
-The first implementation should prove a real vertical slice rather than build every subsystem horizontally.
-
-The selected P0 reference scenario is the existing Genome-web TF Nextflow pilot:
+## 5. Current P0 Path
 
 ```text
 registered genome inputs
-    -> provider resolution
-    -> ScientificTaskSpec + ContextSnapshot
-    -> ScientificAssessment + current PolicyDecision
-    -> ResolvedConfiguration + immutable RunSpec
-    -> current side-effect authorization
-    -> local Nextflow WorkflowExecutor adapter
-    -> RunAttempt / RunEvent collection
-    -> candidate Artifact registration
-    -> typed ValidationReports / ValidationProfile
-    -> Decision
-    -> evidence-backed MemoryCandidate
+    -> ResolvedDataRefs + resolved-member provenance
+    -> ScientificTaskSpec
+    -> ScientificAssessment
+    -> ResolvedConfiguration
+    -> ContextSnapshot + immutable RunSpec
+    -> current PolicyDecision for launch
+    -> revision-scoped WorkflowExecutor capability check
+    -> local synchronous Genome-web Nextflow RunAttempt
+    -> RunEvents + candidate Artifacts
+    -> typed ValidationReports evaluated by ValidationProfile
+    -> Decision / MemoryCandidate
 ```
 
-P0 explicitly stops before automatic publication to the production biological database.
+P0 stops before automatic production publication or canonical update.
 
-The scientific question is frozen in `ScientificTaskSpec`; provider/method parameters such as representative-sequence rules, `min_seqs`, MAFFT/IQ-TREE parameters, seed, threads, and runtime identity belong to `ResolvedConfiguration`/RunSpec unless the scientific question explicitly fixes them.
+The current Genome-web pilot is explicitly treated as a synchronous local Nextflow integration. Slurm/SSH/Kubernetes and generic async exactly-once submission are later slices.
 
-P0 validates the real current local Nextflow integration. Slurm/SSH/Kubernetes, distributed locks, generic WES/TES execution, and provider-native exactly-once submission are later slices rather than implied P0 capabilities.
+## 6. Verification Language
 
-See `docs/architecture/p0-genome-web-tf-vertical-slice.md`, `docs/architecture/workflow-executor-capabilities-and-p0-source-audit.md`, and the review corrections.
+Use these terms consistently:
 
-## 7. Verification Language
-
-Architecture documents may state requirements such as `must`, `shall`, or `expected`.
-
-They must not imply runtime completion unless fresh execution evidence exists. Use these status terms consistently:
-
-- `DESIGNED`: contract exists in documentation;
-- `IMPLEMENTED`: runtime code exists for the contract;
-- `TESTED`: a specified test has been executed with fresh results;
-- `VALIDATED`: scientific/operational acceptance criteria have been executed and passed;
+- `DESIGNED`: contract exists in documentation.
+- `IMPLEMENTED`: runtime code exists for the contract.
+- `TESTED`: a specified test/scenario has been executed with fresh evidence.
+- `VALIDATED`: the stated acceptance criteria were executed and passed for the stated scope.
 - `NOT_RUN`: scenario exists only as a specification.
 
-As of this record, the scientific-contract, multi-perspective-review, and P0 provider-capability contracts are `DESIGNED`; all runtime validation scenarios and addenda remain `NOT_RUN`.
+Current state:
+
+```text
+architecture/contracts = DESIGNED
+BioHarness runtime = NOT_IMPLEMENTED
+P0/scenario validation = NOT_RUN
+```
+
+No review document, plan, or prose statement should be used as evidence that runtime behavior already works.
