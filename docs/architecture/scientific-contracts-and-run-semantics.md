@@ -1,29 +1,41 @@
 # BioHarness Scientific Contracts and Run Semantics
 
-Date: 2026-09-17
-Status: Design record v1 for review
-Scope: Scientific task validity, reproducible data identity, change-impact propagation, execution identity/recovery, and context/retrieval boundaries.
+Date: 2026-09-18
+Status: Authoritative design record
+Runtime status: NOT_IMPLEMENTED
+Validation status: NOT_RUN
+Scope: Scientific intent, analysis feasibility, authorization, data identity, configuration, execution identity/recovery, validation, provenance, reproducibility, canonical state, and context boundaries.
 
-Related documents:
+Related authoritative records:
 
 - `docs/README.md`
 - `docs/superpowers/specs/2026-09-17-bioharness-architecture-design.md`
+- `docs/architecture/p0-genome-web-tf-vertical-slice.md`
+- `docs/architecture/scenario-validation-plan.md`
+
+Memory-specific semantics remain in:
+
 - `docs/architecture/provider-composition-and-research-memory.md`
 - `docs/architecture/hierarchical-associative-memory.md`
 - `docs/architecture/memory-pathway-consolidation-and-promotion.md`
 
-## 1. Decision Summary
+Review/audit records explain why this contract was tightened; they do not override this file.
 
-BioHarness must distinguish four questions that are easy to conflate:
+## 1. Governing Model
 
-1. **What scientific question is being asked?**
-2. **Can the available data and design support the requested inference?**
-3. **Is the requested action authorized?**
-4. **How should an authorized, scientifically supportable task be configured and executed?**
+BioHarness must keep these questions separate:
 
-No single similarity score, memory rank, project Decision, or policy rule can answer all four.
+1. **Scientific intent** — what question or inference is requested?
+2. **Analysis feasibility** — can the available design, data, and method assumptions support performing that inference?
+3. **Authorization** — may the current actor perform the requested side effect now?
+4. **Configuration** — which exact data, method, parameters, environment, and provider will be used?
+5. **Execution** — what concrete attempt ran, where, and what happened?
+6. **Validation** — which properties of outputs/provenance/method assumptions were actually checked?
+7. **Interpretation/publication** — what Finding or canonical state is justified after execution and validation?
 
-The governing sequence is:
+No similarity score, memory rank, project Decision, validation PASS, or policy rule answers all seven.
+
+Canonical sequence:
 
 ```text
 User / Agent Request
@@ -31,12 +43,10 @@ User / Agent Request
       v
 ScientificTaskSpec
       |
-      +-------> ResolvedDataRefs
+      +-------> ResolvedDataRef(s)
       |
       v
 ScientificAssessment
-      |
-      +-------> PolicyDecision
       |
       v
 ResolvedConfiguration
@@ -45,25 +55,25 @@ ResolvedConfiguration
 ContextSnapshot + RunSpec
       |
       v
-RunAttempt(s) -> Artifact(s) -> ValidationReport(s)
+Current PolicyDecision for side effect
       |
       v
-Decision / CanonicalPointer / ResearchMemory
+RunAttempt(s) -> RunEvent(s) -> Artifact(s)
+      |
+      v
+ValidationReport(s) evaluated by ValidationProfile
+      |
+      v
+Finding / Decision / CanonicalPointer / ResearchMemory
 ```
 
-This record keeps the existing BioHarness headless/provider architecture but tightens the scientific and execution contracts that precede memory reuse and workflow submission.
+## 2. PolicyDecision: Current Authority, Not Scientific Truth
 
-## 2. Three Independent Resolution Outputs
+`PolicyDecision` answers:
 
-BioHarness must not use one global precedence ladder to collapse authority, evidence, and configuration into one answer.
+> Is the current actor allowed to perform this action on these resources under current policy?
 
-### 2.1 PolicyDecision
-
-Question:
-
-> Is this actor allowed to perform this action under the current policies?
-
-Recommended outcomes:
+Stable outcomes:
 
 ```text
 ALLOW
@@ -72,71 +82,65 @@ REQUIRE_APPROVAL
 DENY
 ```
 
-Examples:
+Policy can govern actions. It cannot make an unidentifiable scientific design identifiable, make incompatible data compatible, or convert weak evidence into a stronger scientific claim.
 
-- reading a gene record: `ALLOW`;
-- launching a resource-expensive workflow: `REQUIRE_APPROVAL` under a lab policy;
-- overwriting a canonical result directly: `DENY`;
-- promoting a validated candidate: `REQUIRE_APPROVAL` when policy requires human review.
+### Historical versus current authorization
 
-Policy can permit or forbid actions. It cannot make an unidentifiable scientific design identifiable.
+A historical `ContextSnapshot` and historical `PolicyDecision` are immutable reproducibility evidence. They explain why a past RunSpec or action was considered authorized at that time.
 
-### 2.2 ScientificAssessment
+They are **not capability tokens**.
 
-Question:
+Before every new governed side effect, BioHarness evaluates current authorization for the current actor/action/resource. This includes:
 
-> Do the available data, experimental design, method assumptions, and evidence support the requested scientific inference?
+- first workflow submission;
+- a new external retry/resume launch;
+- cancellation;
+- artifact publication;
+- canonical pointer mutation;
+- shared memory/pathway promotion;
+- policy mutation.
 
-Recommended state vocabulary:
+If policy or credentials changed after RunSpec creation, the new side effect may be blocked without rewriting historical state.
+
+## 3. ScientificAssessment: Pre-Execution Feasibility Only
+
+`ScientificAssessment` is a pre-execution assessment of whether the requested analysis/inference is supportable with the available design, data semantics, and selected method class.
+
+Use these states:
 
 ```text
-SUPPORTED
-SUPPORTED_WITH_LIMITATIONS
+ANALYSIS_SUPPORTED
+ANALYSIS_SUPPORTED_WITH_LIMITATIONS
 UNRESOLVED
 NOT_IDENTIFIABLE
 INCOMPATIBLE
 ```
 
-A `ScientificAssessment` should record:
+Meanings:
 
-- requested claim/inference;
-- required design assumptions;
-- observed data characteristics;
-- applicable method constraints;
-- unresolved scientific blockers;
-- evidence/reference links;
-- limitations that must survive into interpretation.
+- `ANALYSIS_SUPPORTED`: current design/data/method assumptions support performing the requested inference;
+- `ANALYSIS_SUPPORTED_WITH_LIMITATIONS`: analysis may proceed, but explicit limitations constrain interpretation;
+- `UNRESOLVED`: required scientific information is missing;
+- `NOT_IDENTIFIABLE`: the requested effect/inference cannot be separated under the current design;
+- `INCOMPATIBLE`: chosen data semantics and method contract are incompatible.
+
+These states do **not** state whether a biological hypothesis is supported.
+
+Post-run scientific claims belong to evidence-linked `Finding`/interpretation objects and may be positive, negative, null, inconclusive, or contradicted.
 
 Examples:
 
-- a treatment effect where treatment is perfectly confounded with batch can be `NOT_IDENTIFIABLE` even if execution is authorized;
-- a count matrix whose semantics do not satisfy a module contract can be `INCOMPATIBLE` even if it is numerically integer-like;
-- a result with no statistically significant signal may still be `SUPPORTED` as a valid null outcome if the design and method are appropriate.
+- treatment perfectly confounded with batch -> `NOT_IDENTIFIABLE`;
+- normalized abundance passed to a count-based method whose contract requires count semantics -> `INCOMPATIBLE`;
+- valid analysis yielding no significant DEGs -> pre-execution assessment can remain `ANALYSIS_SUPPORTED`; the post-run Finding may be null/negative.
 
-### 2.3 ResolvedConfiguration
+## 4. ScientificTaskSpec: Freeze Intent Before Workflow Selection
 
-Question:
+A governed analysis starts from a structured `ScientificTaskSpec`.
 
-> Among scientifically supportable and authorized choices, which exact data, method, parameters, environment, and provider are selected for this Run?
+The TaskSpec records the scientific question and required biological/statistical semantics, not ordinary implementation defaults.
 
-A `ResolvedConfiguration` may be influenced by:
-
-- explicit project Decisions;
-- validated method defaults;
-- current software/environment compatibility;
-- resource constraints;
-- user preferences that do not alter scientific truth;
-- approved adaptive pathway slots.
-
-It must not silently weaken a failed ScientificAssessment.
-
-## 3. ScientificTaskSpec: Freeze Intent Before Workflow Selection
-
-BioHarness must create a structured `ScientificTaskSpec` before selecting a workflow for governed analysis.
-
-The purpose is not to force every user to fill in a long form. Fields can be inferred from authoritative project/data metadata when available. The contract exists so missing scientific information is visible rather than hallucinated.
-
-Minimal conceptual fields:
+Conceptual shape:
 
 ```yaml
 scientific_task_spec:
@@ -150,53 +154,43 @@ scientific_task_spec:
     annotation_release: ...
   experimental_unit: ...
   design_or_comparison: ...
-  input_semantics: ...
-  output_intent: exploratory | candidate | official
+  input_semantic_requirements: ...
   required_identifiers:
     namespace: ...
+  output_intent: exploratory | candidate | official
   unresolved_fields: []
 ```
 
-Not every analysis uses every field. Each Recipe/Module declares which fields are required.
+Not every analysis uses every field. Recipe/Module contracts declare required fields.
 
-### Example: differential expression to GO enrichment
-
-The phrase:
-
-> "For this gene, inspect differential expression and perform GO enrichment."
-
-is scientifically ambiguous. It could mean:
-
-- DEGs from a perturbation of the gene;
-- DEGs from a treatment condition associated with the gene;
-- a coexpression neighborhood around the gene;
-- an already defined DEG set whose membership should be interpreted.
-
-BioHarness must resolve this ambiguity before constructing an official DEG -> GO chain.
-
-The task contract should identify at least:
+Ordinary method parameters belong in `ResolvedConfiguration`, for example:
 
 ```text
-comparison or selection rule
-experimental unit
-sample grouping/design
-source data semantics
-reference/annotation identity
-gene-ID namespace
-gene-set generation rule
-background-universe rule
-intended status of result
+representative-sequence implementation rule
+min_seqs
+model choice
+bootstrap/aLRT settings
+seed
+threads
+container/runtime
+resource settings
 ```
 
-If required information is absent and cannot be obtained from an authoritative provider, the governed task remains unresolved rather than being completed with model-invented assumptions.
+A method parameter belongs in TaskSpec only when the scientific request itself fixes it, such as an exact reproduction study.
 
-## 4. ResolvedDataRef: Logical Identity Is Not Enough
+### Ambiguous request example
 
-Provider URIs are useful stable handles, but a logical URI alone does not prove that the same bytes or biological release will be resolved later.
+> "For this gene, get differential genes and do GO enrichment."
 
-BioHarness therefore distinguishes a logical resource reference from a resolved versioned data identity.
+This could mean a perturbation experiment, a treatment comparison, a coexpression neighborhood, or interpretation of an already-defined DEG set.
 
-Conceptual contract:
+BioHarness must resolve the scientific meaning before constructing an official DEG -> GO chain. It must not silently invent a comparison or substitute another analysis class.
+
+## 5. ResolvedDataRef: Versioned and Checkable Scientific Input
+
+A logical URI is not enough to prove that the same scientific input will be resolved later.
+
+Conceptual single-object contract:
 
 ```yaml
 resolved_data_ref:
@@ -204,36 +198,48 @@ resolved_data_ref:
   resource_type: proteome
   resource_id: Paxg_84K_T2T
   logical_uri: genome-web://proteome/Paxg_84K_T2T
-
   provider_revision: ...
   content_sha256: ...
   schema_version: ...
-
   biological_identity:
     species_id: ...
     assembly: ...
     annotation_release: ...
     identifier_namespace: ...
-
   resolved_at: ...
   retrieval_state: available | external | unavailable
 ```
 
-Fields may be unavailable for some external providers. Missing identity information must be explicit.
+Missing identity information is explicit rather than guessed.
 
-### Required rule
+### Composite collections
 
-For an official `RunSpec`, BioHarness must store enough identity information to answer:
+For mutable or composite datasets, top-level identity must also preserve membership identity:
 
-> Which exact scientific input did this Run consume, and can that identity be checked again?
+```yaml
+resolved_data_ref:
+  resource_type: collection
+  logical_uri: ...
+  provider_revision: ...
+  collection_digest: ...
+  manifest_digest: ...
+  member_count: ...
+  member_manifest_ref: artifact-or-provider-ref
+```
 
-BioHarness does not need to copy every large input into its own store. It does need to preserve stable identity/provenance and, where applicable, a content digest or immutable provider revision.
+Large member lists may live in an immutable/checkable manifest rather than inline.
 
-## 5. Scientific Contract of a Module
+Core rule:
 
-The existing Module contract remains active and should be extended with scientific preconditions.
+> Same logical collection URI does not imply the same scientific input when membership can change.
 
-A Module should be able to declare:
+For an official RunSpec, BioHarness must be able to answer which exact scientific input was consumed and how that identity can be checked again.
+
+## 6. Module Scientific Contract
+
+A Module remains an external capability behind a BioHarness contract.
+
+Its scientific contract may declare:
 
 ```yaml
 scientific_contract:
@@ -248,21 +254,40 @@ scientific_contract:
 
 Examples:
 
-- a differential-expression module specifies what its input count semantics must represent;
-- an enrichment module specifies identifier namespace, tested gene universe/background semantics, annotation source, and multiple-testing behavior;
-- a phylogenetic module specifies whether representative-transcript selection is part of the method or must already be resolved upstream.
+- differential expression declares supported count/data semantics and design requirements;
+- enrichment declares identifier namespace, tested/background universe, annotation source, and multiple-testing behavior;
+- phylogeny declares whether representative-sequence selection is internal or must be resolved upstream.
 
-A file type alone is insufficient scientific validation.
+File type alone is not scientific validation.
 
-## 6. ChangeImpactContract: Replace Mutation-Class Heuristics
+## 7. ResolvedConfiguration
 
-BioHarness previously distinguished structural pathway mutations from adaptive-slot mutations. That distinction remains useful for describing how a pathway changed, but it must not determine scientific impact by itself.
+`ResolvedConfiguration` records one authorized, scientifically supportable executable choice.
 
-A small textual or parameter edit can invalidate many downstream results; a graph-topology change can sometimes be presentation-only.
+It may contain:
 
-Each adaptive slot or version-sensitive dependency should therefore expose an impact contract.
+```text
+Recipe / Module / Workflow revision
+provider
+input bindings
+representative-sequence implementation rule
+thresholds / model parameters
+seed / threads / runtime controls
+container/environment identity
+compute/resource settings
+validation profile
+reproducibility contract
+```
 
-Conceptual shape:
+It may be influenced by explicit project Decisions, validated method defaults, compatibility constraints, resources, and approved adaptive pathway slots.
+
+It must not weaken or hide a failed ScientificAssessment.
+
+## 8. ChangeImpactContract and Dependency-Aware Revalidation
+
+Structural-versus-slot mutation remains useful as pathway history, but it is not a scientific impact model.
+
+Each version-sensitive or adaptive dependency can declare:
 
 ```yaml
 change_impact:
@@ -270,6 +295,7 @@ change_impact:
   compatibility_predicate: ...
   affects:
     - id_mapping
+    - selected_gene_membership
     - enrichment_background
     - annotation_interpretation
   required_revalidation:
@@ -277,79 +303,29 @@ change_impact:
     - enrichment_recompute
 ```
 
-Or:
+Core rule:
 
-```yaml
-change_impact:
-  subject: tree_render_style
-  compatibility_predicate: scientific_data_unchanged
-  affects:
-    - presentation
-  required_revalidation:
-    - render_check
-```
+> Revalidation scope follows scientific/data dependency impact, not whether a change was labelled structural or an adaptive slot.
 
-### Core rule
+Partial thawing remains valid when compatibility is demonstrated.
 
-> Revalidation scope is determined by scientific/data dependency impact, not by whether the changed object was labeled a structural node or adaptive slot.
+Examples:
 
-The old structural-vs-slot mutation statistics may still be recorded for pathway maturity, but they cannot bypass explicit impact analysis.
+- bulk RNA-seq -> single-cell may reuse generic ID-mapping software but must re-evaluate experimental unit, statistical model, selected genes, and enrichment background;
+- annotation v3 -> v4 may require remapping, background regeneration, coverage checks, and enrichment recomputation even if the executable is unchanged.
 
-## 7. Dependency-Aware Invalidation and Partial Thawing
+## 9. RunSpec: Immutable Analysis Identity
 
-Partial thawing remains an important optimization, but the system must identify scientifically affected downstream assumptions.
-
-Recommended sequence:
-
-```text
-Changed input / version / slot / policy
-      |
-      v
-ChangeImpactContract
-      |
-      v
-Compatibility check
-      |
-      +-- compatible --> retain eligible evidence/artifacts
-      |
-      +-- incompatible --> invalidate affected assumptions
-                            |
-                            v
-                    downstream dependency propagation
-                            |
-                            v
-                    recompute / revalidate affected region
-```
-
-### Example: bulk RNA-seq -> single-cell RNA-seq
-
-It may be possible to reuse generic ID-mapping or GO-enrichment software components.
-
-It is not valid to assume that the old differential gene set, independence assumptions, gene-selection process, or enrichment background remain valid merely because the downstream pathway topology is unchanged.
-
-The stable **component** can remain available while the old **evidence and configuration** are invalidated or revalidated.
-
-### Example: annotation release v3 -> v4
-
-Even if the same enrichment executable is used, changes in gene models or identifiers can require revalidation of:
-
-- identifier mapping;
-- selected gene membership;
-- background universe;
-- annotation coverage;
-- final enrichment results.
-
-## 8. RunSpec: Identity of an Analysis
-
-A governed analysis requires an immutable `RunSpec` that identifies the intended scientific computation before execution.
+`RunSpec` identifies the intended scientific/computational work before execution.
 
 Conceptual fields:
 
 ```yaml
 run_spec:
   id: rs-001
+  analysis_hash: content-derived-stable-identity
   scientific_task_spec: task-spec-001
-  context_snapshot: ctx-001
+  historical_context_snapshot: ctx-001
   resolved_configuration: cfg-001
   workflow_revision: ...
   input_refs: [...]
@@ -357,25 +333,66 @@ run_spec:
   environment_identity: ...
   expected_outputs: [...]
   validation_profile: ...
-  idempotency_key: ...
+  reproducibility_contract: ...
   created_at: ...
 ```
 
-### New RunSpec versus new RunAttempt
+`RunSpec` does **not** own one permanent external submission/idempotency key.
 
-Create a **new RunSpec** when the scientific/computational identity changes, for example:
+Create a new RunSpec when result-affecting scientific/computational identity changes, including:
 
-- input content/revision changes;
-- scientific design changes;
-- analysis parameters that affect results change;
-- workflow/module revision changes in a result-affecting way;
-- resolved policy/context changes in a way that affects computation.
+- input content/revision/membership;
+- scientific design;
+- result-affecting parameters;
+- result-affecting workflow/module revision;
+- relevant environment identity;
+- configuration changes that alter computation.
 
-Create another **RunAttempt** for the same RunSpec when retrying or recovering execution without changing the intended computation.
+A retry/recovery with unchanged intended computation can create another RunAttempt for the same RunSpec.
 
-## 9. RunAttempt: One External Execution Binding
+## 10. WorkflowExecutorCapabilitySnapshot
 
-`RunAttempt` records one attempt to realize a RunSpec on a concrete execution backend.
+BioHarness Core must not assume every executor/provider supports the same execution, recovery, or idempotency behavior.
+
+Each adapter declares a revision-scoped capability snapshot, for example:
+
+```yaml
+workflow_executor_capabilities:
+  provider: ...
+  provider_revision: ...
+  submission:
+    mode: synchronous_process | async_remote
+    native_idempotency_key: true | false
+    durable_external_execution_id: true | false | limited
+  observation:
+    poll: true | false | limited
+    reconcile_after_disconnect: true | false | limited
+    logs: true | false
+    trace: true | false
+  retry_resume:
+    engine_resume: true | false
+    explicit_resume_identity: true | false | limited
+  cancellation:
+    supported: true | false | provider_specific
+  compute:
+    backend: local | slurm | ssh | kubernetes | other
+  provenance:
+    invocation_record: true | false
+    source_hashes: true | false
+    tool_fingerprints: true | false
+    resolved_manifest_digest: true | false
+```
+
+Rules:
+
+1. adapters advertise only capabilities demonstrated by the concrete integration;
+2. unsupported capability remains explicit;
+3. Core does not fabricate exactly-once, remote lookup, or reconciliation semantics;
+4. capability snapshots are tied to provider revision, not to an abstract tool name forever.
+
+## 11. RunAttempt: One BioHarness Submission/Binding
+
+`RunAttempt` records one concrete BioHarness attempt to realize a RunSpec.
 
 Conceptual fields:
 
@@ -384,186 +401,229 @@ run_attempt:
   id: ra-001
   run_spec: rs-001
   attempt_number: 1
-  executor: nextflow
+  executor: ...
   compute_provider: ...
+  capability_snapshot: ...
+  submission_key: ...
+  submission_fingerprint: ...
   external_execution_id: ...
-  submitted_at: ...
   state: ...
+  submitted_at: ...
   last_reconciled_at: ...
 ```
+
+`submission_key` is attempt-scoped. Reconciliation of the same attempt reuses the same key. A genuinely new RunAttempt receives a new key while still referring to the same RunSpec.
+
+Workflow-engine internal retries that occur without a new BioHarness external submission remain inside the same RunAttempt and are recorded as provider provenance.
+
+If BioHarness issues a new external launch, including a new provider resume launch, that is a new RunAttempt even if engine work/cache is reused.
 
 Recommended lifecycle:
 
 ```text
 DRAFT
   -> SUBMITTING
-  -> QUEUED
-  -> RUNNING
+  -> QUEUED/RUNNING
   -> COLLECTING
   -> FINISHED
 
-SUBMITTING -> UNKNOWN
+SUBMITTING/RUNNING -> UNKNOWN
+UNKNOWN -> reconciled active/final state
+UNKNOWN -> NEEDS_OPERATOR_RECONCILIATION
 QUEUED/RUNNING -> CANCELLING -> CANCELLED | UNKNOWN
 any active state -> FAILED
-UNKNOWN -> reconciled active/final state
 ```
 
-`FINISHED` means the external computation ended and outputs can be collected. It does not mean scientific validation passed.
+`FINISHED` means external computation completed sufficiently for collection. It does not mean validation or scientific interpretation passed.
 
-## 10. RunEvent: Append-Only Execution History
+## 12. Idempotency, Reconciliation, and Safe Uncertainty
 
-Execution-state observations should be append-only events where practical.
+Retry is not idempotency.
 
-Examples:
+Before submission, record:
+
+- RunSpec identity;
+- RunAttempt identity;
+- attempt-scoped submission key/request identity where supported;
+- executor/provider capability snapshot;
+- submission intent event;
+- current PolicyDecision authorizing the side effect.
+
+If acknowledgement/connection is lost, move the attempt to `UNKNOWN` and reconcile according to provider capability.
+
+If the provider exposes durable external IDs/lookup, automatic reconciliation may be possible.
+
+If the provider does not expose sufficient evidence, the safe state is:
+
+```text
+UNKNOWN -> NEEDS_OPERATOR_RECONCILIATION
+```
+
+not blind duplicate submission.
+
+Only after the previous attempt outcome is established according to provider semantics may policy permit a new RunAttempt.
+
+## 13. RunEvent: Append-Only Execution Evidence
+
+Execution observations should be append-only where practical:
 
 ```text
 AttemptCreated
+AuthorizationChecked
 SubmissionRequested
 ExternalExecutionBound
 ExecutionStarted
 ExecutionHeartbeat
+EngineRetryObserved
 ExecutionFailed
 ExecutionFinished
 ArtifactDiscovered
 ArtifactRegistered
 ValidationStarted
 ValidationReported
+ReconciliationRequired
 ```
 
-Events preserve what the system observed and when. A current-state read model may be derived from them.
+A mutable current-state read model may be derived from these events.
 
-The first implementation may use a relational transaction/outbox approach; Kafka or another distributed event bus is not required.
+The first implementation may use a relational transaction/outbox model; Kafka is not required.
 
-## 11. Idempotency and Unknown Submission State
+## 14. Artifact, ValidationReport, and ValidationProfile
 
-A critical failure mode occurs when the external workflow engine accepts a submission but the client loses the acknowledgement.
+An `Artifact` is an immutable produced or registered object.
 
-BioHarness must not treat this as an ordinary failure and blindly submit again.
+A `ValidationReport` is a typed assessment of a specific subject:
 
-### Required behavior
+```yaml
+validation_report:
+  id: val-001
+  kind: artifact_integrity | provider_contract | method_qc | scientific_assumptions | reproducibility | provenance_completeness | publication_readiness
+  subject:
+    type: artifact | run_spec | run_attempt | package | finding
+    id: ...
+  validator: ...
+  validator_revision: ...
+  inputs: [...]
+  outcome: PASS | PASS_WITH_LIMITATIONS | FAIL | INCONCLUSIVE
+  limitations: [...]
+  evidence: [...]
+  created_at: ...
+```
 
-Before external submission, record:
+A `ValidationProfile` defines which typed reports are required for a particular gate.
 
-- `RunSpec` identity;
-- one `RunAttempt` identity;
-- idempotency key / request identity where supported;
-- expected executor/provider;
-- submission intent event.
-
-If acknowledgement is lost:
+Example candidate gate:
 
 ```text
-SUBMITTING -> UNKNOWN
+provider_contract: PASS
+artifact_integrity: PASS
+provenance_completeness: PASS
 ```
 
-Recovery must attempt to reconcile by querying provider state using the recorded attempt/request identity or provider-supported metadata.
+A provider's `PASS` message cannot silently mean method QC, scientific truth, publication readiness, and provenance completeness at once.
 
-Only when BioHarness can establish that no equivalent external execution exists may it create or submit another attempt according to policy.
+`PASS_WITH_LIMITATIONS` remains distinct and is accepted only when that profile/policy explicitly permits it.
 
-### Rule
+## 15. ReproducibilityContract
 
-> Retry is not equivalent to idempotency.
+Exact software versions are necessary but not sufficient to define reproducibility.
 
-This is especially important for expensive HPC jobs, workflows with side effects, and providers whose submission API is not transactionally coupled to BioHarness state.
-
-## 12. Artifact and ValidationReport Are Separate
-
-An `Artifact` records an immutable produced object or registered scientific result.
-
-Examples:
-
-- alignment;
-- tree;
-- BAM/VCF;
-- DEG table;
-- enrichment table;
-- motif set;
-- report;
-- candidate release bundle.
-
-A `ValidationReport` is a later assessment of one or more Artifacts, a RunSpec, or an analysis package.
-
-This allows:
-
-- independent validation after execution;
-- multiple validators;
-- future revalidation under newer rules;
-- preservation of the original Artifact while scientific interpretation changes.
-
-Conceptual states for validation outcomes may include:
+Supported classes should include at least:
 
 ```text
-PASS
-PASS_WITH_LIMITATIONS
-FAIL
-INCONCLUSIVE
+DETERMINISTIC
+SEEDED_STOCHASTIC
+UNSEEDED_STOCHASTIC
+NONDETERMINISTIC_PARALLEL
+EXTERNAL_NONREPLAYABLE
 ```
 
-Execution completion must never be silently converted into `PASS`.
+Conceptual contract:
 
-## 13. CanonicalPointer Is Governed Mutable State
+```yaml
+reproducibility:
+  class: SEEDED_STOCHASTIC
+  random_seed: 12345
+  rng_algorithm: ...
+  result_equivalence: exact_bytes | exact_structured_values | numerical_tolerance | semantic_qc
+  relevant_runtime_controls:
+    threads: 4
+    accelerator: null
+  tolerance: ...
+```
 
-Large scientific outputs should remain immutable. The current preferred/canonical result can be represented by a small governed pointer.
+Reproducibility does not always mean byte-identical output. Validation uses the declared equivalence level.
 
-Conceptually:
+Unknown nondeterminism is recorded explicitly rather than treated as deterministic.
+
+## 16. CanonicalPointer: Governed, Mutable, and Race-Safe
+
+Large scientific artifacts remain immutable. The current preferred/canonical result is represented by a small governed pointer.
+
+Conceptual pointer:
 
 ```yaml
 canonical_pointer:
   scope: project:evopm
   role: official_tf_tree_release
+  revision: cp-rev-18
   artifact: artifact-882
   decision: dec-72
   updated_at: ...
 ```
 
-Updating the pointer requires the applicable Policy/Decision gate.
+Mutation uses expected-current compare-and-swap semantics:
 
-Historical Artifacts and previous pointer revisions remain traceable.
+```yaml
+canonical_update:
+  expected_current_revision: cp-rev-17
+  target_artifact: artifact-882
+  decision: dec-72
+```
 
-## 14. Context Retrieval Uses Multiple Channels
+If the current revision is no longer 17, the mutation is rejected as stale and the caller must re-read/re-decide.
 
-BioHarness should not require every task to traverse a hierarchy from broad domain to leaf nodes, nor should required constraints compete inside one semantic top-k list.
+A new canonical mutation also requires current authorization. Historical pointer revisions remain traceable.
 
-Recommended channels:
+## 17. Context Retrieval and Content Trust
 
-### 14.1 Mandatory deterministic context
+Required constraints must not compete inside one semantic top-k list.
 
-Always load when applicable:
+Use four channels:
 
-- current hard Policy;
-- explicit blocking Decisions;
-- resource identity/version constraints;
-- critical contradictions/retractions;
-- selected Project/Run context.
+1. **Mandatory deterministic context** — current hard Policy, blocking Decisions, resource/version constraints, critical contradictions/retractions, selected project/run context.
+2. **Exact lookup** — Gene ID, Run ID, Artifact ID, DOI/accession, workflow revision, provider URI.
+3. **Hybrid associative recall** — keyword/vector retrieval filtered by scope/time/version/evidence.
+4. **Graph/hierarchical expansion** — typed multi-hop relationships when needed.
 
-### 14.2 Exact reference lookup
+Hierarchy is an organization/expansion strategy, not a mandatory retrieval path.
 
-Use when the request contains an exact identifier such as:
+### External content is data, not control
 
-- Gene ID;
-- Run ID;
-- Artifact ID;
-- workflow revision;
-- paper DOI/accession;
-- dataset/provider URI.
+BioHarness integrates literature, web resources, provider/tool output, memory, and model-generated content. Text from those sources may resemble instructions.
 
-### 14.3 Hybrid associative recall
+Hard rule:
 
-Use semantic similarity, keyword search, scope/time/version filters, and evidence weighting to find relevant ResearchMemory or procedural knowledge.
+> Retrieved/external content cannot itself create Policy, grant authority, change execution gates, or become an executable control-plane command.
 
-### 14.4 Graph/hierarchical expansion
+Context must preserve source/trust metadata, distinguishing at least:
 
-Use typed edges and abstraction levels when the task requires multi-step scientific context or an exact reference is insufficient.
+```text
+trusted_control_plane
+trusted_internal_data
+validated_scientific_evidence
+external_scientific_content
+model_generated_content
+untrusted_open_world_tool_output
+```
 
-### Principle
+Only typed authorized control-plane actions can mutate governed state.
 
-Hierarchy is an organization and expansion strategy, not a mandatory retrieval path for every query.
-
-## 15. Memory Evidence Must Track Independence
+## 18. Evidence Independence and Research Memory
 
 Raw run count is not equivalent to independent scientific support.
 
-Memory/pathway evidence summaries should distinguish at least:
+Evidence summaries should distinguish:
 
 ```text
 execution_count
@@ -575,137 +635,97 @@ validation_type_count
 contradiction_count
 ```
 
-Two Runs against the same underlying dataset do not become two independent biological replications merely because they occurred in separate Projects.
+Repeated execution on the same biological experiment remains correlated evidence.
 
-Scope promotion must consider provenance correlation.
+Memory/pathway scope promotion must consider provenance correlation and independent support diversity.
 
-## 16. Negative and Null Results Are Valid Outcomes
+Memory may influence assessment/configuration proposals, but cannot silently become Policy or Canonical state.
 
-BioHarness must not learn that "more significant hits" means "more successful science."
+## 19. Negative and Null Results Are Valid Scientific Outcomes
 
-A scientifically valid analysis can conclude:
+BioHarness must not optimize for discovery count.
+
+Valid outcomes include:
 
 - no significant differential expression;
-- no enriched GO term under the defined test/background;
+- no enriched term under the predefined test/background;
 - no supported motif effect;
-- insufficient evidence to distinguish hypotheses;
-- current design is not identifiable.
+- insufficient evidence;
+- current design not identifiable.
 
-The system must not reward parameter changes merely because they increase the number of discoveries.
+The system must not relax thresholds or search parameter space merely to increase significant hits.
 
-Memory consolidation should use validity, reproducibility, QC, and evidence quality rather than discovery count as a success proxy.
+Memory consolidation uses validity, QC, reproducibility, and evidence quality rather than number of discoveries as a success proxy.
 
-## 17. Scientific Assessment Is Versioned and Time-Aware
+## 20. Historical Acceptance and Current Applicability
 
-A historical Run preserves the assessment and context available when it was created.
+A historical Run preserves the TaskSpec, data identity, assessment, configuration, ContextSnapshot, authorization, and validation available at the time.
 
-A later reassessment can differ because of:
+Later reassessment may differ because of:
 
-- retracted or corrected literature;
+- corrected/retracted literature;
 - new annotation/reference versions;
-- newly discovered confounding;
-- tool/version incompatibility;
-- a new fatal contradiction;
+- discovered confounding;
+- version incompatibility;
+- new contradiction;
 - improved validation.
 
-BioHarness preserves both:
+BioHarness preserves both historical acceptance context and current applicability. New assessment does not rewrite the historical Run.
 
-```text
-historical acceptance context
-+
-current applicability assessment
-```
+## 21. Relationship to Older Memory Records
 
-A new assessment does not rewrite the historical Run.
+Three clarifications apply to older architecture records:
 
-## 18. Relationship to Research Memory and Pathways
+1. the authority/configuration precedence ladder is not a general scientific-truth ranking;
+2. adaptive-slot mutation may be low structural churn but is not automatically low scientific impact;
+3. unchanged graph topology does not prove unchanged downstream scientific validity.
 
-`ScientificTaskSpec`, `ScientificAssessment`, `ResolvedDataRef`, and `RunSpec` are authoritative analysis-state objects.
+These clarifications are now part of this authoritative contract rather than an additional correction layer.
 
-Research Memory remains derived knowledge.
+## 22. P0 Acceptance Boundary
 
-A Memory Pathway may help recall:
+P0 uses the existing Genome-web TF Nextflow pilot as one real WorkflowExecutor integration.
 
-- which task fields usually matter;
-- which Data Providers should be queried;
-- which Recipes/Modules are candidates;
-- known pitfalls;
-- prior validated defaults;
-- previous contradictions.
+P0 must demonstrate:
 
-The pathway cannot:
+- explicit registered biological identity;
+- resolved input/member provenance;
+- ScientificTaskSpec separate from method configuration;
+- pre-execution ScientificAssessment;
+- immutable RunSpec and separate RunAttempt;
+- revision-scoped executor capability declaration;
+- current authorization before launch;
+- typed candidate/provenance validation;
+- safe uncertainty handling without fabricated exactly-once guarantees;
+- candidate-only output with no automatic production publication;
+- one evidence-backed MemoryCandidate affecting later context without becoming Policy.
 
-- invent missing experimental design;
-- override current Policy;
-- suppress a fatal scientific contradiction;
-- replace current data/version resolution;
-- silently promote a result to Canonical state.
+P0 does not validate remote Slurm/SSH/Kubernetes execution or generic WES/TES behavior.
 
-## 19. Superseded Interpretations in Older Records
+## 23. Architecture Invariants
 
-This record explicitly narrows or supersedes three earlier interpretations.
+1. Scientific intent, analysis feasibility, current authorization, configuration, execution, validation, and interpretation are separate concepts.
+2. Policy governs actions; it cannot make an invalid design valid.
+3. Historical PolicyDecision/ContextSnapshot explains past authority but does not authorize new present-day side effects.
+4. ScientificAssessment states analysis feasibility, never biological-hypothesis support.
+5. Ordinary method parameters belong to ResolvedConfiguration unless explicitly part of the scientific question.
+6. Governed Runs resolve logical references to versioned/checkable scientific input identities, including collection membership where relevant.
+7. Revalidation follows dependency impact rather than mutation label or graph topology alone.
+8. RunSpec identifies intended work; RunAttempt identifies one BioHarness external submission/binding.
+9. Attempt-scoped submission identity and engine-internal retries are distinct lifecycle layers.
+10. WorkflowExecutor guarantees are capability-declared and provider-revision scoped.
+11. Uncertain execution may require operator reconciliation; blind duplicate submission is forbidden.
+12. Artifact existence, validation outcome, scientific Finding, and canonical publication are independent.
+13. Validation is typed and gate-specific through ValidationProfiles.
+14. Reproducibility declares determinism/equivalence expectations explicitly.
+15. Canonical pointer mutation is current-authorized, revision-checked, and atomic.
+16. Mandatory policy/critical contradiction context does not depend on semantic top-k retrieval.
+17. External/retrieved content is evidence/data, not control-plane authority.
+18. Repeated Runs do not automatically count as independent biological support.
+19. Null/negative results can be valid scientific outcomes.
+20. Historical acceptance and current applicability are separately preserved.
 
-### 19.1 Single precedence ladder
-
-`provider-composition-and-research-memory.md` contains an authority-oriented precedence ordering:
-
-```text
-Hard Policy > Explicit Project Decision > Canonical Fact > ...
-```
-
-That ordering remains useful for authority/configuration conflicts, but it must not be used as a general scientific-truth ranking.
-
-Scientific validity is determined through `ScientificAssessment` and evidence/assumption checks.
-
-### 19.2 Slot mutation receives a smaller stability penalty
-
-`memory-pathway-consolidation-and-promotion.md` distinguishes structural and slot mutation and suggests slot mutation may carry a smaller penalty when declared adaptive.
-
-That remains a possible pathway-stability statistic, but it no longer implies lower scientific impact.
-
-Scientific invalidation/revalidation is determined by `ChangeImpactContract`.
-
-### 19.3 Partial thaw follows only local graph replacement
-
-`hierarchical-associative-memory.md` correctly supports partial thawing, but examples can be read as preserving all unchanged downstream graph structure automatically.
-
-This record clarifies that unchanged topology does not imply unchanged scientific validity. Reuse is allowed only when compatibility and downstream dependency checks support it.
-
-## 20. P0 Acceptance Boundary
-
-The first implementation slice should demonstrate these contracts with one existing scientific workflow provider before introducing automatic pathway mining or a dedicated graph database.
-
-Selected scenario:
-
-- existing Genome-web TF Nextflow pilot;
-- explicit registered genome identity;
-- candidate-only result;
-- no automatic publication;
-- recovery/retry semantics exercised;
-- independent validation required;
-- at least one later task must show that a validated failure/compatibility lesson can affect context without becoming Policy automatically.
-
-See `docs/architecture/p0-genome-web-tf-vertical-slice.md`.
-
-## 21. Architecture Invariants Added by This Record
-
-1. Authorization, scientific validity, and configuration resolution are separate outputs.
-2. Policy can govern actions but cannot make an invalid scientific design valid.
-3. Official execution starts from a structured ScientificTaskSpec; required unresolved fields remain explicit blockers.
-4. Logical provider references are resolved to versioned/checkable data identities for governed Runs.
-5. Revalidation scope follows dependency impact, not mutation label alone.
-6. RunSpec identifies the intended computation; RunAttempt identifies one external execution attempt.
-7. Lost submission acknowledgement produces `UNKNOWN`/reconciliation behavior, not blind resubmission.
-8. Artifact existence is independent of ValidationReport outcome.
-9. Canonical state is a governed pointer/decision, not a property inferred from file presence.
-10. Mandatory policy/critical contradiction context must not depend on semantic top-k retrieval.
-11. Repeated Runs do not automatically count as independent scientific support.
-12. Null/negative results can be valid successful analyses.
-13. Historical acceptance and current applicability are separately preserved.
-
-## 22. Status
-
-This document defines architecture only.
+## 24. Status
 
 ```text
 contract_status = DESIGNED
@@ -713,4 +733,4 @@ runtime_status = NOT_IMPLEMENTED
 scenario_validation = NOT_RUN
 ```
 
-No statement in this record should be interpreted as evidence that the BioHarness runtime already enforces these contracts.
+No statement in this record is evidence that the BioHarness runtime already enforces these contracts.
