@@ -1,46 +1,40 @@
 # BioHarness Scientific Contract Hardening Documentation Plan
 
-Status: Historical documentation plan. The architecture-hardening tasks were executed in PR #1 and later consolidated by `docs/superpowers/plans/2026-09-18-documentation-consolidation.md`. Runtime/scientific validation remains `NOT_RUN`.
+Status: HISTORICAL / SUPERSEDED BY CONSOLIDATED DESIGN
 
-> This file is retained as planning history only. Current authoritative semantics are in `docs/architecture/scientific-contracts-and-run-semantics.md`, `docs/architecture/p0-genome-web-tf-vertical-slice.md`, and `docs/architecture/scenario-validation-plan.md`.
+> This file records the original documentation-hardening work that led to PR #1. It is not authoritative architecture and not runtime evidence. Final semantics live in the authoritative docs listed by `docs/README.md`.
 
-## Original Goal
+## Goal
 
 Repair the BioHarness architecture records so scientific validity, authority, data identity, invalidation, execution recovery, and memory promotion have explicit non-conflicting semantics before implementation starts.
 
-## Original Architecture Direction
+## Architecture
 
 Keep the existing headless Research Control Plane, provider/adapter boundaries, evidence-backed memory, and external workflow engines. Add explicit scientific/run contracts and validate the design against the existing Genome-web TF Nextflow pilot as the first real-world vertical slice.
 
-## Global Constraints
-
-- Documentation-only change: no application code, database migration, deployment, or production data mutation.
-- Existing mature scientific algorithms and workflow engines remain external providers.
-- Scientific validity and execution success remain independent.
-- Memory cannot directly become Policy or Canonical state.
-- Every proposed P0 runtime behavior must be testable against a concrete failure or recovery scenario.
-- Validation scenarios are `NOT_RUN` until a future implementation executes them.
-
-## Documentation Tasks
+## Historical documentation tasks
 
 - [x] Establish a documentation authority/navigation map.
-- [x] Define scientific and execution contracts.
-- [x] Add an evidence/reference register.
-- [x] Define the Genome-web TF P0 vertical slice.
-- [x] Define executable validation scenarios.
-- [x] Perform cross-document review and open Draft PR #1.
-- [x] Perform multi-perspective architecture review.
-- [x] Perform source-level audit of the selected P0 Genome-web TF provider.
-- [x] Consolidate review corrections back into authoritative contracts.
+- [x] Add scientific intent, feasibility, authorization, data identity, and Run semantics.
+- [x] Define dependency-aware revalidation instead of mutation-label heuristics.
+- [x] Separate RunSpec, RunAttempt, Artifact, validation, Decision/canonical state.
+- [x] Define provider capability honesty and safe uncertain-execution behavior.
+- [x] Record external/internal architecture evidence and adoption boundaries.
+- [x] Select the existing Genome-web TF Nextflow pilot as P0.
+- [x] Create architecture acceptance scenarios and preserve them as `NOT_RUN`.
+- [x] Perform multi-perspective review and fold accepted findings back into authoritative docs.
+- [x] Consolidate same-PR correction layers into final authoritative contracts.
 
-## Runtime Tasks
+## Handoff
 
-These were never part of the documentation phase and remain intentionally unexecuted:
+This historical plan does not authorize runtime implementation and does not claim that any acceptance scenario has executed.
 
-- [ ] Implement BioHarness runtime/control-plane objects.
-- [ ] Implement Genome-web Data Provider adapter.
-- [ ] Implement the P0 local Nextflow WorkflowExecutor adapter.
-- [ ] Execute `scenario-validation-plan.md` acceptance scenarios.
-- [ ] Record fresh runtime/scientific validation evidence.
+Current implementation planning must start from:
 
-No unchecked runtime item in this historical plan should be interpreted as a documentation blocker for PR #1.
+```text
+docs/README.md
+  -> core architecture spec
+  -> scientific/run contract
+  -> P0 vertical slice
+  -> acceptance-scenario catalog
+```
