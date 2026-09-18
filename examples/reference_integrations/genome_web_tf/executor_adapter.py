@@ -105,10 +105,21 @@ class GenomeWebTFExecutorAdapter:
         control_dir = (
             self.config.control_root / execution.provider_attempt_name
         )
+        env = dict(os.environ)
+        runtime_overrides = (
+            ("GW_NEXTFLOW", self.config.nextflow_executable),
+            ("GW_NF_PYTHON", self.config.provider_python),
+            ("GW_NF_MAFFT", self.config.mafft_executable),
+            ("GW_NF_IQTREE", self.config.iqtree_executable),
+        )
+        for variable, path in runtime_overrides:
+            if path is not None:
+                env[variable] = str(path)
+
         return InvocationSpec(
             argv=tuple(argv),
             cwd=self.config.repo_root,
-            env=dict(os.environ),
+            env=env,
             stdout_path=control_dir / "stdout.log",
             stderr_path=control_dir / "stderr.log",
         )
