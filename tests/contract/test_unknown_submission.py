@@ -77,3 +77,21 @@ def test_known_no_spawn_failure_is_failed_not_unknown():
     assert attempt.state is RunAttemptState.FAILED
     assert runner.spawn_calls == 1
     assert runs.events == [RunEventType.EXECUTION_EXITED]
+
+
+class BindPersistenceFailureRuns(Runs):
+    def bind_execution(self, attempt_id, binding, occurred_at):
+        raise RuntimeError("binding persistence failed")
+
+
+def test_bind_persistence_failure_after_spawn_is_unknown():
+    spec=make_run_spec(); planning=Planning(spec); runs=BindPersistenceFailureRuns(spec)
+    runner=FakeProcessRunner()
+    service=ExecutionService(
+        policy=FakePolicyEvaluator(), executor=FakeWorkflowExecutor(), process_runner=runner,
+        uow_factory=lambda: Uow(planning,runs), preflight=lambda _: {"checked": True}, clock=lambda: NOW,
+    )
+    attempt=service.start(spec.id, actor="alice")
+    assert attempt.state is RunAttemptState.UNKNOWN
+    assert runner.spawn_calls == 1
+    assert runs.events == [RunEventType.EXECUTION_OUTCOME_UNKNOWN]
