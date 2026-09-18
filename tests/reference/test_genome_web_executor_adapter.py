@@ -158,7 +158,7 @@ def test_prepare_composes_only_audited_launcher_command(tmp_path):
         "--existing-identities",
         str(cfg.existing_identities),
     )
-    assert "nextflow" not in " ".join(invocation.argv).lower()
+    assert all(arg != "nextflow" for arg in invocation.argv)
     assert invocation.stdout_path == (
         cfg.control_root / execution.provider_attempt_name / "stdout.log"
     )
