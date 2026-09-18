@@ -110,3 +110,37 @@ def test_profile_revision_is_historical_not_rewritten():
     assert old.profile_revision == "1" and old.outcome is ValidationOutcome.PASS
     assert new.profile_revision == "2" and new.outcome is ValidationOutcome.FAIL
     assert repo.evaluations[0] == old
+
+
+def test_conflicting_duplicate_required_kind_is_rejected():
+    repo=ValidationRepo(); repo.add_profile(candidate_v1())
+    service=ValidationService(uow_factory=lambda: Uow(repo), clock=lambda: NOW)
+    reports=[
+        service.report(kind="provider_contract", subject_type="run_attempt", subject_id="ra-1", validator="provider-a", validator_revision="1", outcome=ValidationOutcome.PASS, evidence_refs=("e:pass",)),
+        service.report(kind="provider_contract", subject_type="run_attempt", subject_id="ra-1", validator="provider-b", validator_revision="1", outcome=ValidationOutcome.FAIL, evidence_refs=("e:fail",)),
+        service.report(kind="artifact_integrity", subject_type="run_attempt", subject_id="ra-1", validator="bioharness", validator_revision="1", outcome=ValidationOutcome.PASS, evidence_refs=("e:2",)),
+        service.report(kind="provenance_completeness", subject_type="run_attempt", subject_id="ra-1", validator="bioharness", validator_revision="1", outcome=ValidationOutcome.PASS, evidence_refs=("e:3",)),
+    ]
+    with pytest.raises(ValueError, match="exactly one"):
+        service.evaluate("candidate", "1", tuple(r.id for r in reports))
+    assert repo.evaluations == []
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [ValidationOutcome.PASS, ValidationOutcome.PASS_WITH_LIMITATIONS],
+)
+def test_positive_validation_report_requires_evidence(outcome):
+    repo=ValidationRepo()
+    service=ValidationService(uow_factory=lambda: Uow(repo), clock=lambda: NOW)
+    with pytest.raises(ValueError, match="evidence"):
+        service.report(
+            kind="provider_contract",
+            subject_type="run_attempt",
+            subject_id="ra-1",
+            validator="provider",
+            validator_revision="1",
+            outcome=outcome,
+            evidence_refs=(),
+        )
+    assert repo.reports == {}
