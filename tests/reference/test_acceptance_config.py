@@ -42,6 +42,10 @@ artifact_root = "{tmp_path / "artifacts"}"
 database_url_env = "BIOHARNESS_DATABASE_URL"
 production_roots = ["{tmp_path / "production"}"]
 read_only_source_roots = ["{tmp_path / "source"}"]
+nextflow_executable = "{tmp_path / "runtime" / "nextflow"}"
+provider_python = "{tmp_path / "runtime" / "python"}"
+mafft_executable = "{tmp_path / "runtime" / "mafft"}"
+iqtree_executable = "{tmp_path / "runtime" / "iqtree3"}"
 '''.lstrip(),
         encoding="utf-8",
     )
@@ -58,6 +62,10 @@ def test_acceptance_config_loads_isolated_paths(tmp_path):
     assert config.database_url_env == "BIOHARNESS_DATABASE_URL"
     assert config.production_roots == (tmp_path / "production",)
     assert config.read_only_source_roots == (tmp_path / "source",)
+    assert config.nextflow_executable == tmp_path / "runtime" / "nextflow"
+    assert config.provider_python == tmp_path / "runtime" / "python"
+    assert config.mafft_executable == tmp_path / "runtime" / "mafft"
+    assert config.iqtree_executable == tmp_path / "runtime" / "iqtree3"
     preflight_module().validate_path_isolation(config)
 
 

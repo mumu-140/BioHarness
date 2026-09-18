@@ -51,6 +51,10 @@ def make_config(tmp_path, *, revision=AUDITED, existing=False):
         planning_root=tmp_path / "planning",
         control_root=tmp_path / "control",
         run_root=tmp_path / "runs",
+        nextflow_executable=tmp_path / "runtime" / "nextflow",
+        provider_python=tmp_path / "runtime" / "python",
+        mafft_executable=tmp_path / "runtime" / "mafft",
+        iqtree_executable=tmp_path / "runtime" / "iqtree3",
         existing_identities=existing_identities,
     )
 
@@ -166,6 +170,10 @@ def test_prepare_composes_only_audited_launcher_command(tmp_path):
     assert invocation.stderr_path == (
         cfg.control_root / execution.provider_attempt_name / "stderr.log"
     )
+    assert invocation.env["GW_NEXTFLOW"] == str(cfg.nextflow_executable)
+    assert invocation.env["GW_NF_PYTHON"] == str(cfg.provider_python)
+    assert invocation.env["GW_NF_MAFFT"] == str(cfg.mafft_executable)
+    assert invocation.env["GW_NF_IQTREE"] == str(cfg.iqtree_executable)
     assert not (
         cfg.run_root / "attempts" / execution.provider_attempt_name
     ).exists()
