@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from bioharness.domain.artifact import Artifact
@@ -100,6 +100,43 @@ class PlanningRepository:
 class RunRepository:
     def __init__(self, session: Session):
         self.session = session
+
+    def allocate_attempt_intent(self, *, run_spec_id: UUID, decision: PolicyDecision, capability_snapshot: dict, executor_namespace: str, now: datetime) -> RunAttempt:
+        spec_row = self.session.execute(
+            select(RunSpecRow).where(RunSpecRow.id == run_spec_id).with_for_update()
+        ).scalar_one()
+        if not spec_row.executable:
+            raise ValueError("RunSpec is not executable")
+        max_number = self.session.execute(
+            select(func.max(RunAttemptRow.attempt_number)).where(RunAttemptRow.run_spec_id == run_spec_id)
+        ).scalar_one()
+        attempt_number = (max_number or 0) + 1
+        attempt = RunAttempt(
+            id=uuid4(),
+            run_spec_id=run_spec_id,
+            attempt_number=attempt_number,
+            executor_namespace=executor_namespace,
+            capability_snapshot=capability_snapshot,
+            submission_key=str(uuid4()),
+            provider_attempt_name=f"bh-{str(run_spec_id)[:8]}-{attempt_number}",
+            state=RunAttemptState.SUBMITTING,
+            submitted_at=now,
+        )
+        self.session.add(PolicyDecisionRow(
+            id=decision.id, action=decision.action, outcome=decision.outcome.value,
+            payload=_payload(decision), decided_at=decision.decided_at,
+        ))
+        self.add_attempt(attempt)
+        for seq, event_type, payload in (
+            (1, RunEventType.ATTEMPT_CREATED, {"run_spec_id": str(run_spec_id)}),
+            (2, RunEventType.AUTHORIZATION_CHECKED, {"policy_decision_id": str(decision.id)}),
+            (3, RunEventType.SUBMISSION_INTENT_RECORDED, {"submission_key": attempt.submission_key}),
+        ):
+            self.add_event(RunEvent(
+                id=uuid4(), run_attempt_id=attempt.id, sequence_no=seq,
+                event_type=event_type, payload=payload, occurred_at=now,
+            ))
+        return attempt
 
     def add_attempt(self, value: RunAttempt) -> None:
         self.session.add(RunAttemptRow(
