@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from bioharness.domain.policy import PolicyOutcome
-from bioharness.domain.run import RunAttemptState, RunEventType, UnresolvedAttemptExists
+from bioharness.domain.run import RunAttemptState, RunEventType
 
 
 class LaunchDenied(RuntimeError):
@@ -62,8 +62,6 @@ class ExecutionService:
             raise PriorAttemptUnresolved(str(run_spec_id))
 
         preflight_evidence = self.preflight(run_spec)
-        if not isinstance(preflight_evidence, dict):
-            raise PreflightFailed("preflight must return a dictionary evidence record")
         decision = self.policy.evaluate(actor, "launch", f"runspec:{run_spec_id}", {"run_spec_hash": run_spec.run_spec_hash})
         if decision.outcome in {PolicyOutcome.DENY, PolicyOutcome.REQUIRE_APPROVAL}:
             with self.uow_factory() as uow:
@@ -72,19 +70,16 @@ class ExecutionService:
             raise LaunchDenied(f"launch not authorized: {decision.outcome.value}")
 
         capabilities = self.executor.capabilities().model_dump(mode="json")
-        try:
-            with self.uow_factory() as uow:
-                attempt = uow.runs.allocate_attempt_intent(
-                    run_spec_id=run_spec.id,
-                    decision=decision,
-                    capability_snapshot=capabilities,
-                    executor_namespace=self.executor_namespace,
-                    preflight_evidence=preflight_evidence,
-                    now=self.clock(),
-                )
-                uow.commit()
-        except UnresolvedAttemptExists as exc:
-            raise PriorAttemptUnresolved(str(run_spec_id)) from exc
+        with self.uow_factory() as uow:
+            attempt = uow.runs.allocate_attempt_intent(
+                run_spec_id=run_spec.id,
+                decision=decision,
+                capability_snapshot=capabilities,
+                executor_namespace=self.executor_namespace,
+                preflight_evidence=preflight_evidence,
+                now=self.clock(),
+            )
+            uow.commit()
 
         try:
             invocation = self.executor.prepare(run_spec.model_dump(mode="json"), attempt.model_dump(mode="json"))

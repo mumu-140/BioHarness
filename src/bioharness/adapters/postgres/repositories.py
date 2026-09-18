@@ -17,7 +17,6 @@ from bioharness.domain.run import (
     RunEvent,
     RunEventType,
     RunSpec,
-    UnresolvedAttemptExists,
     allowed_transition,
 )
 from bioharness.domain.task import ScientificTaskSpec
@@ -120,7 +119,7 @@ class RunRepository:
             .limit(1)
         ).scalar_one_or_none()
         if unresolved_id is not None:
-            raise UnresolvedAttemptExists(
+            raise RuntimeError(
                 f"unresolved prior attempt blocks allocation for RunSpec {run_spec_id}"
             )
         max_number = self.session.execute(
@@ -148,7 +147,6 @@ class RunRepository:
             (2, RunEventType.AUTHORIZATION_CHECKED, {"policy_decision_id": str(decision.id)}),
             (3, RunEventType.SUBMISSION_INTENT_RECORDED, {
                 "submission_key": attempt.submission_key,
-                "run_spec_hash": spec_row.run_spec_hash,
                 "preflight_evidence": preflight_evidence,
             }),
         ):

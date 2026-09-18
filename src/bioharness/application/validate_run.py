@@ -17,10 +17,6 @@ class ValidationReportNotFound(LookupError):
     pass
 
 
-class ValidationSubjectMismatch(ValueError):
-    pass
-
-
 class ValidationService:
     def __init__(self, *, uow_factory, clock: Callable[[], datetime] | None = None):
         self.uow_factory = uow_factory
@@ -75,7 +71,7 @@ class ValidationService:
         if reports:
             subject = (reports[0].subject_type, reports[0].subject_id)
             if any((report.subject_type, report.subject_id) != subject for report in reports[1:]):
-                raise ValidationSubjectMismatch(
+                raise ValueError(
                     "validation reports for one evaluation must share the same subject"
                 )
 
