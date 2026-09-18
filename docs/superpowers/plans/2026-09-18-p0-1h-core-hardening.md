@@ -37,6 +37,7 @@ Execution status: **COMPLETED ON IMPLEMENTATION BRANCH; MERGE REVIEW PENDING**
 - [x] Write a regression test proving a prior `SUBMITTING` attempt blocks a second allocation.
 - [x] Run the focused test and verify RED for the intended reason.
 - [x] Add `RUNNING` and `COLLECTING` coverage without widening scope.
+- [x] Block all active/unresolved states in `ExecutionService` before preflight while retaining the repository row-lock check as the final transactional guard.
 - [x] Implement the minimal transactional check under the existing RunSpec row lock.
 - [x] Run focused allocation/reconciliation tests and verify GREEN.
 - [x] Run the full Core suite.
