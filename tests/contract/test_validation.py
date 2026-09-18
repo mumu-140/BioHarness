@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from uuid import uuid4
 
 import pytest
 
@@ -6,6 +7,7 @@ from bioharness.application.validate_run import ValidationService
 from bioharness.domain.validation import (
     ValidationOutcome,
     ValidationProfile,
+    ValidationReport,
     ValidationRequirement,
 )
 
@@ -144,3 +146,35 @@ def test_positive_validation_report_requires_evidence(outcome):
             evidence_refs=(),
         )
     assert repo.reports == {}
+
+
+
+def test_evaluation_rejects_positive_report_without_evidence():
+    repo=ValidationRepo(); repo.add_profile(candidate_v1())
+    service=ValidationService(uow_factory=lambda: Uow(repo), clock=lambda: NOW)
+    provider=ValidationReport(
+        id=uuid4(),
+        kind="provider_contract",
+        subject_type="run_attempt",
+        subject_id="ra-1",
+        validator="legacy-provider",
+        validator_revision="1",
+        outcome=ValidationOutcome.PASS,
+        evidence_refs=(),
+        created_at=NOW,
+    )
+    repo.add_report(provider)
+    artifact=service.report(
+        kind="artifact_integrity", subject_type="run_attempt", subject_id="ra-1",
+        validator="bioharness", validator_revision="1", outcome=ValidationOutcome.PASS,
+        evidence_refs=("e:2",),
+    )
+    provenance=service.report(
+        kind="provenance_completeness", subject_type="run_attempt", subject_id="ra-1",
+        validator="bioharness", validator_revision="1", outcome=ValidationOutcome.PASS,
+        evidence_refs=("e:3",),
+    )
+
+    with pytest.raises(ValueError, match="evidence"):
+        service.evaluate("candidate", "1", (provider.id, artifact.id, provenance.id))
+    assert repo.evaluations == []
