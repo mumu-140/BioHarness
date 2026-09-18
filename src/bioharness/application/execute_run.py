@@ -5,6 +5,8 @@ from uuid import UUID
 from bioharness.domain.policy import PolicyOutcome
 from bioharness.domain.run import RunAttemptState, RunEventType
 
+from .materialize_execution import materialize_execution
+
 
 class LaunchDenied(RuntimeError):
     pass
@@ -82,7 +84,12 @@ class ExecutionService:
             uow.commit()
 
         try:
-            invocation = self.executor.prepare(run_spec.model_dump(mode="json"), attempt.model_dump(mode="json"))
+            execution = materialize_execution(
+                uow_factory=self.uow_factory,
+                run_spec=run_spec,
+                attempt=attempt,
+            )
+            invocation = self.executor.prepare(execution)
         except Exception as exc:
             with self.uow_factory() as uow:
                 failed = uow.runs.transition(
