@@ -3,7 +3,7 @@ from typing import Any
 
 import typer
 
-app = typer.Typer(help="BioHarness research control plane")
+app = typer.Typer(help="BioHarness research control plane; runtime composition is supplied by deployment/reference integration")
 task_app = typer.Typer(help="Scientific task operations")
 run_app = typer.Typer(help="Run attempt operations")
 artifact_app = typer.Typer(help="Artifact inspection operations")

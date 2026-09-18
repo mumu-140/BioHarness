@@ -1209,7 +1209,7 @@ Use `typer.testing.CliRunner`, invoke `--help` for root and command groups, and 
 
 - [ ] **Step 2: Implement thin CLI**
 
-CLI builds Settings/UoW/application services and delegates. It prints JSON containing stable IDs/status. It never imports provider-specific examples or invokes subprocesses directly.
+CLI defines the stable command surface and delegates to an injected runtime composition object. Core owns the command/use-case boundary; concrete composition of Settings/UoW with PolicyEvaluator, DataProvider, and WorkflowExecutor adapters is supplied by deployment/reference integration code. It prints JSON containing stable IDs/status. It never imports provider-specific examples or invokes subprocesses directly.
 
 - [ ] **Step 3: Add architecture dependency guard**
 

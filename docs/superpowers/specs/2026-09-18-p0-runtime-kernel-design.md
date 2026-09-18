@@ -645,7 +645,7 @@ A later task may receive a matching MemoryCandidate as optional context. It cann
 
 ## 20. CLI Boundary
 
-P0 CLI is a thin client over application use cases. Command names may be grouped as follows:
+P0 CLI is a thin client over application use cases. Core defines the stable command surface and delegates to an injected runtime composition object; deployment/reference integration code supplies concrete Settings/UoW and PolicyEvaluator/DataProvider/WorkflowExecutor adapter composition. Command names may be grouped as follows:
 
 ```text
 bioharness task create
@@ -663,7 +663,7 @@ bioharness memory list
 
 CLI output must expose stable IDs and scientific/control-plane state rather than only human-readable success text.
 
-The CLI never bypasses application/domain services to invoke a provider/workflow directly.
+The CLI never owns provider/runtime composition and never bypasses application/domain services to invoke a provider/workflow directly. Invoking a runtime-dependent command without an attached composition fails explicitly rather than silently selecting a provider or execution backend.
 
 ## 21. Reuse Policy for External Projects
 
