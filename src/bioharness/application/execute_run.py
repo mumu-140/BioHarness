@@ -18,6 +18,10 @@ class PreflightFailed(RuntimeError):
     pass
 
 
+class PriorAttemptUnresolved(RuntimeError):
+    pass
+
+
 class ExecutionService:
     def __init__(
         self,
@@ -45,6 +49,17 @@ class ExecutionService:
             raise RunSpecNotFound(str(run_spec_id))
         if not run_spec.executable:
             raise PreflightFailed("RunSpec is not executable")
+
+        with self.uow_factory() as uow:
+            prior_attempts = uow.runs.list_attempts(run_spec_id)
+        if any(
+            attempt.state in {
+                RunAttemptState.UNKNOWN,
+                RunAttemptState.NEEDS_OPERATOR_RECONCILIATION,
+            }
+            for attempt in prior_attempts
+        ):
+            raise PriorAttemptUnresolved(str(run_spec_id))
 
         self.preflight(run_spec)
         decision = self.policy.evaluate(actor, "launch", f"runspec:{run_spec_id}", {"run_spec_hash": run_spec.run_spec_hash})
