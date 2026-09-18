@@ -1,6 +1,6 @@
 # Genome-web TF Reference Integration Implementation Plan
 
-Execution status: **COMPLETE**. P0.1H is merged at `25313eff0df22db3f543768051f19c3aff994adc`; Tasks 1–5 are complete. Fresh isolated acceptance at BioHarness revision `952c3c1b71dad8e0e47ef38cd79c471a142fd564` supports PASS for `TF-01`, `TF-02`, `EXEC-01`, `EXEC-06`, and `DATA-01`; all other catalog scenarios remain unchanged.
+Execution status: **COMPLETE**. P0.1H is merged at `25313eff0df22db3f543768051f19c3aff994adc`; Tasks 1–5 are complete. Fresh isolated acceptance was re-run against the current reference-integration head `5e9b52c99c8c9e09494d5aed1394a5368d4a09a5` and supports PASS for `TF-01`, `TF-02`, `EXEC-01`, `EXEC-06`, and `DATA-01`; all other catalog scenarios remain unchanged.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
@@ -360,9 +360,13 @@ artifact_root = "/srv/bioharness-p0/artifacts"
 database_url_env = "BIOHARNESS_DATABASE_URL"
 production_roots = ["/srv/genome-web-production"]
 read_only_source_roots = ["/srv/genome-web-data"]
+nextflow_executable = "/srv/bioharness-p0/runtime/bin/nextflow"
+provider_python = "/srv/bioharness-p0/runtime/bin/python"
+mafft_executable = "/srv/bioharness-p0/runtime/bin/mafft"
+iqtree_executable = "/srv/bioharness-p0/runtime/bin/iqtree3"
 ```
 
-Optional `existing_identities` is configured only when the acceptance fixture has the audited snapshot. No credential is committed.
+The four runtime executable paths are explicit reference configuration, are injected into the audited launcher through its existing `GW_*` overrides, and are checked against the frozen `environment_contract` immediately before launch. Optional `existing_identities` is configured only when the acceptance fixture has the audited snapshot. No credential is committed.
 
 - [x] **Step 2: Validate path isolation**
 

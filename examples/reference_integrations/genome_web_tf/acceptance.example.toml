@@ -8,3 +8,7 @@ artifact_root = "/srv/bioharness-p0/artifacts"
 database_url_env = "BIOHARNESS_DATABASE_URL"
 production_roots = ["/srv/genome-web-production"]
 read_only_source_roots = ["/srv/genome-web-data"]
+nextflow_executable = "/srv/bioharness-p0/runtime/bin/nextflow"
+provider_python = "/srv/bioharness-p0/runtime/bin/python"
+mafft_executable = "/srv/bioharness-p0/runtime/bin/mafft"
+iqtree_executable = "/srv/bioharness-p0/runtime/bin/iqtree3"

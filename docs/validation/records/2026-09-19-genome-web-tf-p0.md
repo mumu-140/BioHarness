@@ -1,7 +1,7 @@
 # Genome-web TF P0 Reference Acceptance Evidence — 2026-09-19
 
 Status: **fresh executable acceptance evidence** for the explicitly listed P0 reference scenarios only.  
-BioHarness implementation revision: `952c3c1b71dad8e0e47ef38cd79c471a142fd564`  
+BioHarness implementation revision: `5e9b52c99c8c9e09494d5aed1394a5368d4a09a5`  
 Audited Genome-web revision: `05072cbbcd533ca59afa13996d8d0edd8f939c6e`  
 P0.1H base merged in `main`: `25313eff0df22db3f543768051f19c3aff994adc`
 
@@ -15,13 +15,18 @@ All writable acceptance state was constrained to:
 
 `/home/yangs/software/BioHarness-P0-Acceptance`
 
-The existing Genome-web production tree was not mounted into the acceptance container. The existing HGT tool environment was mounted read-only.
+The fresh current-head run used the isolated session:
+
+`/home/yangs/software/BioHarness-P0-Acceptance/sessions/20260919-live3`
+
+The existing Genome-web production tree was not mounted into the acceptance container. The exact audited provider checkout under the acceptance workspace and the two-genome fixture were mounted read-only. The existing HGT runtime tool directory was mounted read-only.
 
 Observed isolated runtime:
 
-- acceptance image: `sha256:234679529cf3c9cbe9136b3e36787eabb812f56b8d9337b3fa7d27f82a39ae5c`
-- image BioHarness HEAD: `952c3c1b71dad8e0e47ef38cd79c471a142fd564`
+- acceptance image: `sha256:c29437bd8fc6b5055d5334f873ba9bf54431e67d5a7c9dc14a2b1b7a344fa23a`
+- image / BioHarness checkout HEAD: `5e9b52c99c8c9e09494d5aed1394a5368d4a09a5`
 - provider checkout HEAD: `05072cbbcd533ca59afa13996d8d0edd8f939c6e`
+- provider checkout dirty files: `0`
 - container Python: 3.12.13
 - OpenJDK: 21.0.12.1
 - Nextflow: 25.10.4 build 11173
@@ -29,14 +34,20 @@ Observed isolated runtime:
 - Biopython: 1.78
 - MAFFT: 7.526
 - IQ-TREE: 3.1.2
-- `ps`: isolated container `/usr/bin/ps`
+- `ps`: present in the isolated container
 - production path visible inside acceptance container: **no**
 - acceptance root writable inside acceptance container: **yes**
-- `/data/miniconda3` writable inside acceptance container: **no**
+- provider checkout / biological fixture / `/data/miniconda3`: mounted read-only
+
+The audited launcher sets a run-root-scoped `NXF_HOME` with `NXF_OFFLINE=true`. The exact Nextflow 25.10.4 one-jar was therefore staged only inside the isolated run root before launch:
+
+`sessions/20260919-live3/runs/runtime/framework/25.10.4/nextflow-25.10.4-one.jar`
+
+SHA-256: `9897f09ee7116bdf3c6beb202210380e2daead237af07078e8b0bf97c29b7a66`.
 
 Post-run read-only checksum verification of the existing production Genome-web tree matched the pre-run baseline for all ten inspected TF/runtime files:
 
-| Production file | Pre-run SHA-256 = post-run SHA-256 |
+| Production file | SHA-256 |
 | --- | --- |
 | `pipeline/config.sh` | `76fb20c7e754443714dbf0abb0a4fc50eb7cc4fa1293bea7c05a572221d27b39` |
 | `pipeline/nextflow/run.sh` | `ae0361e90b103719fd345f70cd07ec54d61d43a6969030bc056307c4afe858f1` |
@@ -49,11 +60,11 @@ Post-run read-only checksum verification of the existing production Genome-web t
 | `pipeline/scripts/build_tf_tree_summary.py` | `5edacf117dcf0f194209bb15da976a42ae37dbc4ef675a5a4bf90f5560211bc3` |
 | `pipeline/scripts/verify_tf_tree_summary.py` | `49a3639c6c12b55db6818ba9d457f3f0e4d16cccd4656dc73752e7288d0278e0` |
 
-The production `config.sh` already differed from the audited repository revision before acceptance; the live acceptance therefore used the clean, detached, exact audited checkout under the isolated acceptance workspace instead of the production tree.
+The production `config.sh` already differed from the audited repository revision before acceptance. Live acceptance therefore used the clean detached audited checkout under the isolated acceptance workspace rather than the production tree.
 
-Acceptance configuration SHA-256:
+Current-head acceptance configuration SHA-256:
 
-`f1cdef9b7353ab25161315afb5fb6499947bdf4df2c56baaa764b81aa35554d3`
+`157d43d048d14605f96436c035266a556420ad2df5d0ed702e62c796bc16a7b7`
 
 Original two-genome fixture manifest SHA-256:
 
@@ -61,47 +72,58 @@ Original two-genome fixture manifest SHA-256:
 
 The fixture contains UIDs `90001` and `00902`.
 
-## 2. Pre-Acceptance Hardening Observation
+## 2. Pre-Acceptance Hardening Observations
 
-The first governed live attempt, using pre-hotfix BioHarness revision `d870a4fee66aaa4a9a264a779a337491c0a793eb`, exposed two environment/recovery issues before the final acceptance run:
+The first governed live attempt on the earlier reference head `d870a4fee66aaa4a9a264a779a337491c0a793eb` exposed two environment/recovery issues before the final accepted run:
 
-1. the isolated container lacked `ps`, which Nextflow requires for task metrics, so both PREPARE tasks failed before scientific processing;
-2. the exited wrapper remained a Linux zombie and `LocalProcessProbe` incorrectly treated the zombie as active because `kill(pid, 0)` succeeded and the process start token still matched.
+1. the isolated container lacked `ps`, which Nextflow requires for local task metrics;
+2. an exited wrapper could remain a Linux zombie and `LocalProcessProbe` originally treated that zombie as active because `kill(pid, 0)` succeeded and the process start token still matched.
 
-The affected RunAttempt was explicitly resolved to `FAILED`; no automatic duplicate launch was issued.
+The failed attempt was preserved as failure evidence; no automatic duplicate launch was issued.
 
-A focused TDD hotfix was then produced:
+A focused RED → GREEN fix added zombie-state detection in `LocalProcessProbe` at `952c3c1b71dad8e0e47ef38cd79c471a142fd564`. Subsequent commits pinned the reference runtime executables and hardened launch preflight so Nextflow, provider Python/Biopython, MAFFT, IQ-TREE3, and `ps` are observed and compared with the frozen `ResolvedConfiguration.environment_contract` before external launch.
 
-- RED: `ae1b818ed16deeb4ab42bd8ce84713543217b53c`; CI #98 failed only because the zombie was incorrectly reported active;
-- GREEN: `b1aa8b517ad327bd8327e7266df41787a1a8b349`; CI #99 passed with 72 tests;
-- the same fix is present in the reference-integration revision `952c3c1b71dad8e0e47ef38cd79c471a142fd564`.
+The current acceptance revision `5e9b52c99c8c9e09494d5aed1394a5368d4a09a5` includes both fixes and was re-run from a fresh isolated database/run session.
 
-The acceptance-only Docker runtime was rebuilt with `procps`; no host/global package or glibc replacement was performed.
+## 3. Current-Head Dry Run and Governed Live Run
 
-This failed attempt is retained as recovery/debug evidence and is **not** used as PASS evidence for the five scenarios below.
-
-## 3. Final Governed Live Run
-
-The final acceptance flow was created and executed through BioHarness services:
-
-`TaskSpec -> current read authorization -> ResolvedDataRefs -> ScientificAssessment -> ResolvedConfiguration -> RunSpec -> fresh preflight -> current launch authorization -> durable submission intent -> ExecutionDescriptor -> RunAttempt -> external run.sh -> Nextflow/MAFFT/IQ-TREE -> artifact registration -> typed validation -> scoped MemoryCandidate`
-
-Key identities:
-
-- TaskSpec: `a3d6094b-fd83-4f5a-bbbb-9fd617755b5f`
-- RunSpec: `6ce6eccb-8727-4d2e-87e9-02e3c3f29e0f`
-- analysis hash: `f58c2163756df8a78a38e0ed56e760df5108eec5bd44ee7be17c134bbb027865`
-- RunSpec hash: `12b8db1693027b12acae9831da6be3c54cffed7b3cb4afaf5f5012e75c8db4b9`
-- RunAttempt: `1f43864d-5939-4b72-809c-5f16f17f0885`
-- provider attempt: `bh-6ce6eccb-1`
-- final RunAttempt state: `FINISHED`
-
-Policy outcomes observed by the governed acceptance driver:
+The current-head dry run produced only a preview; it did not execute the resolver or launcher. It showed:
 
 - `read_resolve = ALLOW`
 - `launch = ALLOW`
 - `production_publication = DENY`
 - `canonical_mutation = DENY`
+- audited provider revision `05072cbb...`
+- all planning/control/run/artifact paths inside the isolated `live3` session
+- invocation through the audited `bash .../pipeline/nextflow/run.sh` boundary
+
+The governed live flow was then executed through BioHarness services:
+
+`TaskSpec -> current read authorization -> ResolvedDataRefs -> ScientificAssessment -> ResolvedConfiguration -> RunSpec -> fresh GenomeWebTFPreflight -> current launch authorization + durable SubmissionIntent -> materialized ExecutionDescriptor -> RunAttempt -> external Genome-web run.sh -> Nextflow/MAFFT/IQ-TREE -> artifact registration -> typed validation -> scoped MemoryCandidate`
+
+Key identities:
+
+- TaskSpec: `bbdd22f1-d38a-456c-af89-b3e816568472`
+- RunSpec: `9d0768e6-b78e-4a6e-979b-51fb4453c75c`
+- analysis hash: `f58c2163756df8a78a38e0ed56e760df5108eec5bd44ee7be17c134bbb027865`
+- RunSpec hash: `d2be293fe2a46c11a0780b0c6007490cf1a154d0fd24bceb27a99923ea486600`
+- RunAttempt: `3600c607-fbdb-4ca8-bfa1-928d4cae1cb6`
+- provider attempt: `bh-9d0768e6-1`
+- final RunAttempt state: `FINISHED`
+- executed_at: 2026-09-19 01:44:46 +08:00
+
+The durable `SubmissionIntentRecorded.preflight_evidence` captured:
+
+- exact RunSpec hash;
+- exact audited provider checkout revision;
+- resolved manifest and per-genome member-manifest digests;
+- `launcher_help = PASS`;
+- `nextflow = 25.10.4`;
+- `provider_python = 3.10.12`;
+- `biopython = 1.78`;
+- `mafft = 7.526`;
+- `iqtree3 = 3.1.2`;
+- `ps = PASS`.
 
 Provider candidate:
 
@@ -112,30 +134,29 @@ Provider candidate:
 - completed MAFFT tasks: 4
 - completed IQ-TREE tasks: 4
 - completed BUNDLE tasks: 1
+- failed/cached tasks: 0
 
-BioHarness registered 15 artifacts and independently re-hashed them after collection; mismatches: **0**.
-
-Typed validation:
+BioHarness registered 15 artifacts. Typed validation produced:
 
 - `provider_contract = PASS`
 - `artifact_integrity = PASS`
 - `provenance_completeness = PASS`
 - candidate profile evaluation: `PASS`
-- ValidationEvaluation: `432dd198-20e2-4287-ab94-348b8ce643eb`
+- ValidationEvaluation: `63a764ee-ffb6-4c73-a8de-c5ffe9bcaaa2`
 
 A scoped evidence-linked MemoryCandidate was recorded:
 
-`ca20170b-ee10-4da2-8573-94270ddd54b4`
+`de3387db-c711-4a86-8778-d5eb071c7954`
 
-The successful RunAttempt contains 37 ordered RunEvents, including `AttemptCreated`, `AuthorizationChecked`, `SubmissionIntentRecorded`, `ExternalProcessBound`, `ExecutionStarted`, `ReconciliationResolved`, artifact discovery/registration events, and `CollectionFinished`.
+with status `candidate`; it was not promoted to policy, finding, canonical state, or production publication.
 
-## 4. Exact Input Identity
+## 4. Exact Input Identity and UID Lineage
 
 The BioHarness-resolved manifest consumed by the provider has SHA-256:
 
 `1921f4dcc6aa02ffb2eb501e7f5841c5dfa4301d82a4baacc2062c056f9a21fa`
 
-The provider's `invocation.json` independently recorded the same `genomes_sha256`, and the registered `resolved_manifest` artifact has the same digest.
+The provider `invocation.json` independently recorded the same `genomes_sha256`, and the registered `resolved_manifest` artifact has the same digest.
 
 ResolvedDataRef evidence:
 
@@ -144,95 +165,120 @@ ResolvedDataRef evidence:
 | `00902` | `genomeweb:registered-genome:Beta_assembly:00902` | `5cda16e56435a947f4684dc2898428238a771f6e01b24405546a59f0eaa05d71` |
 | `90001` | `genomeweb:registered-genome:Alpha_assembly:90001` | `fc7a672e887fcedada9807a3ea14dfb3e4a80f5491e2f0c2f680bca0bdbfc42` |
 
-The frozen RunSpec points to those exact ResolvedDataRef IDs; the provider invocation consumed the resolved manifest rather than reinterpreting the original logical-resource strings.
+Fresh lineage comparison confirmed:
+
+- planning resolved-manifest SHA = provider `genomes_sha256` = recorded ResolvedDataRef manifest SHA;
+- planning UIDs = `00902`, `90001`;
+- candidate UIDs = `00902`, `90001`;
+- leading-zero UID preservation = true.
 
 ## 5. Negative Cross-UID Fixture
 
-A separate fixture was copied inside the isolated acceptance workspace and only the negative copy was changed: the Beta gene table was deliberately given the Alpha gene ID `Alpha_FamilyA_0` while retaining Beta UID `00902`.
+A separate fixture copy was created only inside `sessions/20260919-live3/negative`. The Beta gene table was deliberately given the Alpha gene ID `Alpha_FamilyA_0` while retaining Beta UID `00902`. The original fixture was not modified.
 
-The original fixture was not modified.
+The negative case was passed through BioHarness `ResolutionService` and the external audited Genome-web resolver.
 
 Observed provider result:
 
+- executed_at: 2026-09-19 01:45:56 +08:00
 - exit code: `1`
 - stderr: `FATAL: cross-uid ID collision: ('gene', 'Alpha_FamilyA_0')`
-- provider attempt directories before resolution: unchanged after resolution
 - scientific execution started: **false**
-- no ID repair, aliasing, or retry was performed
+- provider attempt entries: none
+- ID repair/renaming/retry: none
 
-## 6. Scenario Records
+## 6. Capability and Resume Boundaries
+
+The current-head capability snapshot observed against the audited checkout is:
+
+```text
+mode = synchronous_process
+native_idempotency_key = false
+durable_external_execution_id = false
+poll = false
+reconcile_after_disconnect = limited
+cancellation = unsupported
+logs = true
+trace = true
+```
+
+A separate materialization/probe of the actual successful RunSpec/RunAttempt produced:
+
+- resume-related configuration keys: none;
+- resume-related invocation args: none;
+- implicit `resume last`: false.
+
+This supports only the P0 claim that automated/implicit resume is disabled. It does not claim durable explicit resume lineage for a later separate launch.
+
+## 7. Scenario Records
 
 ### TF-01 — Preserve leading-zero UID
 
-- setup / fixture: two-genome fixture with `Beta_assembly / 00902`
-- implementation revision: `952c3c1b71dad8e0e47ef38cd79c471a142fd564`
+- fixture: two-genome fixture with `Beta_assembly / 00902`
+- implementation revision: `5e9b52c99c8c9e09494d5aed1394a5368d4a09a5`
 - provider revision: `05072cbbcd533ca59afa13996d8d0edd8f939c6e`
-- input identity: manifest digest `e7e8d144...`; consumed resolved digest `1921f4dc...`; Beta member-manifest digest `5cda16e5...`
-- action: full governed live run
-- observable assertions: `00902` remained in the ResolvedDataRef logical URI/biological identity, resolved manifest, frozen RunSpec input reference, provider-consumed candidate, and final candidate manifest
+- action: full governed live run plus independent UID-lineage check
+- observable assertions: `00902` remained exact in resolved identity, planning manifest, provider-consumed manifest, and final candidate
 - forbidden behavior: coercion to `902` or silent aliasing
 - expected vs observed: exact five-digit UID preserved
 - outcome: **PASS**
-- executed_at: 2026-09-18 23:55–23:56 +08:00
 
 ### TF-02 — Reject cross-UID identity conflict
 
-- fixture: isolated conflicting copy with `Alpha_FamilyA_0` placed in the Beta/00902 gene table
-- implementation revision: `952c3c1b71dad8e0e47ef38cd79c471a142fd564`
-- provider revision: `05072cbbcd533ca59afa13996d8d0edd8f939c6e`
-- action / injected failure: resolve the deliberately conflicting fixture through BioHarness `ResolutionService` and the external Genome-web resolver
-- observable assertions: provider returned exit 1 with explicit cross-UID collision; provider attempt directory set did not change
-- forbidden behavior: ID repair/renaming, merging records, or starting scientific execution merely to continue
-- expected vs observed: fail-fast before science execution
+- fixture: isolated conflicting copy with `Alpha_FamilyA_0` in the Beta/00902 gene table
+- implementation revision: current head above
+- provider revision: audited revision above
+- action: resolve through BioHarness `ResolutionService` and external Genome-web resolver
+- observable assertions: provider exit 1 with explicit cross-UID collision; no provider attempt entry; no scientific execution
+- forbidden behavior: ID repair/renaming, merging records, retry, or starting science merely to continue
+- expected vs observed: fail-fast during provider resolution
 - outcome: **PASS**
-- executed_at: 2026-09-19 00:00 +08:00
 
 ### EXEC-01 — Capability honesty
 
-- implementation/provider revisions: as above
-- action: capability snapshot recorded on the live RunAttempt
-- observed snapshot: `mode=synchronous_process`, `native_idempotency_key=false`, `durable_external_execution_id=false`, `poll=false`, `reconcile_after_disconnect=limited`, `cancellation=unsupported`, `logs=true`, `trace=true`
-- expected vs observed: matches the audited provider capability boundary
+- action: query current reference executor capability snapshot against the actual audited checkout
+- observed snapshot: synchronous process; no native idempotency key, durable external execution ID, polling, or cancellation; limited reconciliation; logs/trace available
+- expected vs observed: matches audited capability boundary
 - outcome: **PASS**
 
 ### EXEC-06 — Explicit resume lineage
 
-- implementation/provider revisions: as above
-- action: inspect the actual provider invocation for the live RunAttempt
-- observable assertion: provider command contains no `-resume`; no implicit `last` or other session identity was introduced by BioHarness
+- action: materialize the actual successful live RunSpec/RunAttempt and inspect the current executor invocation
+- observable assertions: no resume configuration key and no `-resume` / implicit `last` argument
 - forbidden behavior: implicit resume identity treated as scientific identity
 - expected vs observed: automated resume remained disabled
 - outcome: **PASS**
 
 ### DATA-01 — Resolved manifest/member provenance
 
-- implementation/provider revisions: as above
-- action: compare frozen ResolvedDataRef identities, provider invocation evidence, and registered artifact digest
-- observable assertions: BioHarness resolved manifest SHA-256, provider `genomes_sha256`, and registered resolved-manifest artifact SHA-256 all equal `1921f4dc...`; per-genome member-manifest digests are stored independently
-- forbidden behavior: treating mutable path strings alone as immutable consumed-data identity
+- action: compare frozen ResolvedDataRefs, provider invocation evidence, registered artifact identity, and UID-lineage record
+- observable assertions: BioHarness manifest SHA, provider `genomes_sha256`, and registered resolved-manifest digest agree; per-genome member-manifest digests remain independently stored
+- forbidden behavior: mutable path strings alone standing in for immutable consumed-data identity
 - expected vs observed: exact consumed manifest/member provenance independently checkable
 - outcome: **PASS**
 
-## 7. Supporting Evidence
+## 8. Supporting Evidence
 
-Runtime evidence intentionally remains outside git under the isolated acceptance root. Recorded files and SHA-256:
+Runtime evidence remains outside git under the isolated `live3` session. Recorded evidence and SHA-256:
 
 | Relative evidence path | SHA-256 |
 | --- | --- |
-| `logs/planning-preflight-952c3c1.json` | `94602a4d38521365e032cd1ea06b4ff58b46daae1636f774685a4a936ef6f46d` |
-| `logs/live-acceptance-952c3c1.stdout` | `2b085e46bf43dce5a7141432c672478507a5fc5b42ebcc56f1d36006c4e8ee8d` |
-| `logs/cross-uid-negative-952c3c1.json` | `9a7a5c4dcf5976fc984c09af502b6aa7685534008542dce4814e3e03f4f66525` |
-| `logs/db-evidence-952c3c1.json` | `3d60d30e197d7cd5ddc52faa3e3b1bf8bc97b26eb3667226d69fc802dd21cf5f` |
-| `logs/provider-evidence-952c3c1.json` | `8beca204e298f9a7c7ee1b0d9a580b7524e4f1a8730e8ea2f10ef01b38588442` |
-| `logs/environment-952c3c1.txt` | `fab2304d147adedb7e9c0a10b46f181b0e84d1be328ef12ba7b18088d52a1106` |
+| `acceptance.toml` | `157d43d048d14605f96436c035266a556420ad2df5d0ed702e62c796bc16a7b7` |
+| `logs/dry-run.json` | `82810e1e12c255f831b48a054b6cbc77e5625ffeccf73d77083ab3c5c9e4f364` |
+| `logs/governed-live.json` | `65b64ef1a17f09f7e93d9974fba0e9dbd2e382fff5bcd0f0efb788481594d981` |
+| `logs/preflight-evidence.json` | `b10254c13f77a2f4bebcbcfe61158d105ff86ddc5a8977a237a4e0ff633b4350` |
+| `logs/capabilities.json` | `b3c494e7d14ee971538b6aaec39c7f338dfef0705abf50f4bec15eafbe550c3b` |
+| `logs/resume-policy.json` | `119799a2766fd11930845d8dfec8220508e5c56372beb18f6b301f1acc0874c1` |
+| `logs/uid-lineage.json` | `03e65ca473cb977dc499085832d2b1f782185c4e8db241ac70d3252bfc51d079` |
+| `negative/logs/negative-resolution.json` | `889124d26266703eac015b07c0d98b768d323629759b4c2d4e925d2b5dfc61c3` |
 
-Reference-integration GitHub CI on implementation revision `952c3c1...`: **95 passed** (CI #100).
+Verification after current-head acceptance:
 
-A separate remote Core-only run, with no Genome-web checkout required by Core tests, completed:
+- GitHub CI #109 on `5e9b52c...`: **97 passed in 15.36s**
+- separate remote Core-only suite with no Genome-web checkout mounted: **72 passed in 30.53s**
+- production Genome-web checksum baseline: unchanged after acceptance
 
-`72 passed in 31.02s`
-
-## 8. Scope Limits
+## 9. Scope Limits
 
 This record does **not** claim:
 
