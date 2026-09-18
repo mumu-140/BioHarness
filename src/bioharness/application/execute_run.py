@@ -125,7 +125,24 @@ class ExecutionService:
                 uow.commit()
             return unknown
 
-        with self.uow_factory() as uow:
-            running = uow.runs.bind_execution(attempt.id, binding, self.clock())
-            uow.commit()
+        try:
+            with self.uow_factory() as uow:
+                running = uow.runs.bind_execution(attempt.id, binding, self.clock())
+                uow.commit()
+        except Exception as exc:
+            with self.uow_factory() as uow:
+                unknown = uow.runs.transition(
+                    attempt.id,
+                    RunAttemptState.UNKNOWN,
+                    RunEventType.EXECUTION_OUTCOME_UNKNOWN,
+                    {
+                        "phase": "bind",
+                        "binding": binding.model_dump(mode="json"),
+                        "error": type(exc).__name__,
+                        "message": str(exc),
+                    },
+                    self.clock(),
+                )
+                uow.commit()
+            return unknown
         return running
