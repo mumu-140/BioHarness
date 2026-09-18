@@ -1,5 +1,6 @@
 import csv
 import importlib
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -225,3 +226,11 @@ def test_provider_failure_preserves_exit_code_and_stderr_without_retry(tmp_path)
     assert caught.value.returncode == 7
     assert "cross-uid ID collision" in caught.value.stderr
     assert len([call for call in runner.calls if call[0][0] != "git"]) == 1
+
+
+
+def test_adapter_defaults_to_subprocess_runner(tmp_path):
+    data = module()
+    cfg = make_config(tmp_path)
+    adapter = data.GenomeWebTFDataAdapter(cfg)
+    assert adapter.run_command is subprocess.run
