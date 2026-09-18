@@ -31,6 +31,9 @@ class Runs:
     def list_attempts(self, run_spec_id):
         return (self.attempt,)
 
+    def allocate_attempt_intent(self, **kwargs):
+        raise AssertionError("active prior attempt reached allocation")
+
     def transition(self, attempt_id, target, event_type, payload, occurred_at):
         if not allowed_transition(self.attempt.state, target):
             raise ValueError(
