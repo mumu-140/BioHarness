@@ -19,6 +19,21 @@ def linux_process_start_token(pid: int) -> str | None:
     return fields_after_comm[19]
 
 
+def linux_process_state(pid: int) -> str | None:
+    stat_path = Path(f"/proc/{pid}/stat")
+    try:
+        raw = stat_path.read_text(encoding="utf-8")
+    except (FileNotFoundError, PermissionError, OSError):
+        return None
+    close = raw.rfind(")")
+    if close < 0:
+        return None
+    fields_after_comm = raw[close + 2 :].split()
+    if not fields_after_comm:
+        return None
+    return fields_after_comm[0]
+
+
 class LocalProcessProbe:
     def probe(self, binding: ExecutionBinding) -> bool | None:
         if binding.pid is None:
@@ -29,6 +44,9 @@ class LocalProcessProbe:
             return False
         except PermissionError:
             return None
+        state = linux_process_state(binding.pid)
+        if state == "Z":
+            return False
         current_token = linux_process_start_token(binding.pid)
         if binding.process_start_token is None or current_token is None:
             return None
