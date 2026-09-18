@@ -56,6 +56,9 @@ class ExecutionService:
             prior_attempts = uow.runs.list_attempts(run_spec_id)
         if any(
             attempt.state in {
+                RunAttemptState.SUBMITTING,
+                RunAttemptState.RUNNING,
+                RunAttemptState.COLLECTING,
                 RunAttemptState.UNKNOWN,
                 RunAttemptState.NEEDS_OPERATOR_RECONCILIATION,
             }
