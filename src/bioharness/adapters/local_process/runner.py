@@ -51,7 +51,12 @@ class LocalProcessRunner:
             process_start_token=linux_process_start_token(process.pid),
             external_execution_id=None,
         )
-        process_record = _write_process_record(invocation, binding)
+        try:
+            process_record = _write_process_record(invocation, binding)
+        except Exception as exc:
+            raise RuntimeError(
+                "external process started but recovery evidence could not be persisted"
+            ) from exc
         return binding.model_copy(
             update={
                 "metadata": {
