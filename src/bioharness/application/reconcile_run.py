@@ -2,8 +2,11 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from uuid import UUID
 
-from bioharness.domain.run import RunAttemptState, RunEventType
-from bioharness.ports.workflow_executor import ExecutionEvidence
+from bioharness.domain.run import (
+    RunAttemptState,
+    RunEventType,
+    allowed_transition,
+)
 
 
 class AttemptNotFound(LookupError):
@@ -11,7 +14,14 @@ class AttemptNotFound(LookupError):
 
 
 class ReconciliationService:
-    def __init__(self, *, executor, process_probe, uow_factory, clock: Callable[[], datetime] | None = None):
+    def __init__(
+        self,
+        *,
+        executor,
+        process_probe,
+        uow_factory,
+        clock: Callable[[], datetime] | None = None,
+    ):
         self.executor = executor
         self.process_probe = process_probe
         self.uow_factory = uow_factory
@@ -25,14 +35,16 @@ class ReconciliationService:
 
         binding = attempt.binding
         probe_value = self.process_probe.probe(binding) if binding is not None else None
-        if binding is not None:
-            evidence = self.executor.inspect(binding, attempt.model_dump(mode="json"))
-        else:
-            evidence = ExecutionEvidence(active=None, terminal_outcome=None, exit_code=None)
+        evidence = self.executor.inspect(
+            binding,
+            attempt.model_dump(mode="json"),
+        )
 
         if evidence.terminal_outcome == "succeeded" and evidence.exit_code == 0:
             target = RunAttemptState.COLLECTING
-        elif evidence.terminal_outcome == "failed" or (evidence.exit_code is not None and evidence.exit_code != 0):
+        elif evidence.terminal_outcome == "failed" or (
+            evidence.exit_code is not None and evidence.exit_code != 0
+        ):
             target = RunAttemptState.FAILED
         elif probe_value is True and evidence.active is not False:
             target = RunAttemptState.RUNNING
@@ -49,7 +61,45 @@ class ReconciliationService:
             "process_probe": probe_value,
             "executor_evidence": evidence.model_dump(mode="json"),
         }
+        now = self.clock()
+
         with self.uow_factory() as uow:
-            updated = uow.runs.transition(attempt.id, target, event_type, payload, self.clock())
+            current = uow.runs.get_attempt(attempt.id)
+            if current is None:
+                raise AttemptNotFound(str(attempt.id))
+
+            if current.state is target:
+                return current
+
+            if allowed_transition(current.state, target):
+                updated = uow.runs.transition(
+                    current.id,
+                    target,
+                    event_type,
+                    payload,
+                    now,
+                )
+            elif (
+                allowed_transition(current.state, RunAttemptState.UNKNOWN)
+                and allowed_transition(RunAttemptState.UNKNOWN, target)
+            ):
+                unknown = uow.runs.transition(
+                    current.id,
+                    RunAttemptState.UNKNOWN,
+                    RunEventType.EXECUTION_OUTCOME_UNKNOWN,
+                    payload,
+                    now,
+                )
+                updated = uow.runs.transition(
+                    unknown.id,
+                    target,
+                    event_type,
+                    payload,
+                    now,
+                )
+            else:
+                raise ValueError(
+                    f"cannot reconcile RunAttempt {current.state} -> {target}"
+                )
             uow.commit()
         return updated
