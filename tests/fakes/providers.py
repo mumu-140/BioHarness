@@ -7,6 +7,7 @@ from bioharness.domain.policy import PolicyDecision, PolicyOutcome
 from bioharness.ports.data_provider import ProviderResolution, ProviderResource
 from bioharness.ports.workflow_executor import (
     ExecutionBinding,
+    ExecutionDescriptor,
     ExecutionEvidence,
     ExecutorCapabilities,
     InvocationSpec,
@@ -70,9 +71,9 @@ class FakeWorkflowExecutor:
             trace=False,
         )
 
-    def prepare(self, run_spec_payload: dict[str, Any], attempt_payload: dict[str, Any]) -> InvocationSpec:
+    def prepare(self, execution: ExecutionDescriptor) -> InvocationSpec:
         self.prepare_calls += 1
-        self.calls.append(("prepare", (run_spec_payload, attempt_payload)))
+        self.calls.append(("prepare", execution))
         return self._invocation
 
     def inspect(self, binding: ExecutionBinding | None, attempt_payload: dict[str, Any]) -> ExecutionEvidence:
