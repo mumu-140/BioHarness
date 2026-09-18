@@ -48,7 +48,7 @@ class WorkflowExecutor(Protocol):
     ) -> InvocationSpec: ...
 
     def inspect(
-        self, binding: ExecutionBinding, attempt_payload: dict[str, Any]
+        self, binding: ExecutionBinding | None, attempt_payload: dict[str, Any]
     ) -> ExecutionEvidence: ...
 
     def discover_artifacts(
