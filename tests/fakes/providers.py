@@ -75,7 +75,7 @@ class FakeWorkflowExecutor:
         self.calls.append(("prepare", (run_spec_payload, attempt_payload)))
         return self._invocation
 
-    def inspect(self, binding: ExecutionBinding, attempt_payload: dict[str, Any]) -> ExecutionEvidence:
+    def inspect(self, binding: ExecutionBinding | None, attempt_payload: dict[str, Any]) -> ExecutionEvidence:
         self.calls.append(("inspect", (binding, attempt_payload)))
         return self._evidence
 
