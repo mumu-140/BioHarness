@@ -1,5 +1,6 @@
 import csv
 import hashlib
+import subprocess
 import sys
 from pathlib import Path
 from typing import Callable
@@ -87,7 +88,7 @@ class GenomeWebTFDataAdapter:
         self,
         config: GenomeWebTFReferenceConfig,
         *,
-        run_command: Callable,
+        run_command: Callable = subprocess.run,
     ):
         self.config = config
         self.run_command = run_command
