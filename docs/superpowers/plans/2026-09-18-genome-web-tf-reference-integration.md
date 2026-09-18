@@ -56,23 +56,34 @@ def test_audited_revision_is_fixed():
     assert AUDITED_REVISION == "05072cbbcd533ca59afa13996d8d0edd8f939c6e"
 
 
-def test_revision_mismatch_refuses_audited_capabilities(tmp_path):
-    cfg = GenomeWebTFReferenceConfig(
+def config(tmp_path, revision=AUDITED_REVISION):
+    return GenomeWebTFReferenceConfig(
         repo_root=tmp_path,
-        provider_revision="different",
+        provider_revision=revision,
         input_manifest=tmp_path / "genomes.tsv",
         planning_root=tmp_path / "planning",
         control_root=tmp_path / "control",
         run_root=tmp_path / "runs",
     )
+
+
+def test_configured_revision_mismatch_is_rejected(tmp_path):
     with pytest.raises(RevisionMismatch):
-        cfg.require_audited_revision()
+        config(tmp_path, revision="different").require_audited_revision(
+            observed_revision=AUDITED_REVISION
+        )
+
+
+def test_observed_checkout_revision_mismatch_is_rejected(tmp_path):
+    with pytest.raises(RevisionMismatch):
+        config(tmp_path).require_audited_revision(observed_revision="different")
 ```
 
 - [ ] **Step 2: Implement revision/path config**
 
 ```python
 # examples/reference_integrations/genome_web_tf/config.py
+import subprocess
 from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
@@ -93,10 +104,15 @@ class GenomeWebTFReferenceConfig(BaseModel):
     run_root: Path
     existing_identities: Path | None = None
 
-    def require_audited_revision(self) -> None:
-        if self.provider_revision != AUDITED_REVISION:
+    def require_audited_revision(self, *, observed_revision: str) -> None:
+        if (
+            self.provider_revision != AUDITED_REVISION
+            or observed_revision != AUDITED_REVISION
+        ):
             raise RevisionMismatch(
-                f"audited capability snapshot requires {AUDITED_REVISION}; got {self.provider_revision}"
+                "audited provider revision is required both in configuration "
+                f"and observed checkout; configured={self.provider_revision} "
+                f"observed={observed_revision}"
             )
 
     @property
@@ -106,7 +122,19 @@ class GenomeWebTFReferenceConfig(BaseModel):
     @property
     def launcher(self) -> Path:
         return self.repo_root / "pipeline/nextflow/run.sh"
+
+
+def observe_repo_revision(repo_root: Path, run_command=subprocess.run) -> str:
+    result = run_command(
+        ("git", "-C", str(repo_root), "rev-parse", "HEAD"),
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    return result.stdout.strip()
 ```
+
+Tests inject the revision command runner. If Git metadata is unavailable or the observed checkout is not the audited commit, the reference adapter stops rather than trusting a configured revision string. Every operation that executes audited Genome-web code calls this guard before using the source.
 
 - [ ] **Step 3: Document dependency direction**
 
@@ -146,6 +174,8 @@ git commit -m "test: define Genome-web reference integration boundary"
 - Produces: Core `ProviderResolution` with one `ProviderResource` per requested genome and exact resolved/member identity evidence.
 
 - [ ] **Step 1: Define typed provider error and stable logical identity**
+
+Before invoking the external resolver, observe the actual Genome-web checkout revision and require both the configured and observed revisions to equal `AUDITED_REVISION`.
 
 Define `ProviderResolutionError` that preserves provider exit code/stderr. Define one adapter-local logical URI scheme, for example:
 
@@ -230,6 +260,8 @@ git commit -m "feat: add external Genome-web data reference adapter"
 - Produces: `ExecutorCapabilities`, `InvocationSpec`, `ExecutionEvidence`, and artifact candidate dictionaries.
 
 - [ ] **Step 1: Test audited capability snapshot**
+
+Observe the actual checkout revision first; `capabilities()` must refuse to return the audited snapshot when either configured or observed revision differs.
 
 At the pinned revision assert:
 
@@ -336,7 +368,7 @@ Reject writable planning/control/run/artifact paths that equal, contain, or are 
 
 Immediately before launch, preflight loads the RunSpec's ResolvedDataRefs/ResolvedConfiguration through the injected UoW and verifies at least:
 - `run_spec_hash` is the identity being checked;
-- provider/workflow revision still equals the audited revision;
+- configured provider/workflow revision and the actually observed Genome-web checkout revision both equal the audited revision;
 - every recorded resolved manifest/member SHA-256 still matches current bytes;
 - writable roots remain isolated;
 - required external launcher/tool/runtime checks are observed without modifying provider state.
@@ -474,7 +506,7 @@ This reference plan is complete only when:
 
 1. BioHarness Core CI remains green with no Genome-web checkout present.
 2. The reference adapter contains no copied Genome-web scientific/validation/launcher source.
-3. The pinned provider revision is verified before applying its capability snapshot.
+3. The pinned provider revision is verified against the actual Genome-web checkout, not only a configured string, before executing audited provider code or applying its capability snapshot.
 4. Live acceptance uses isolated BioHarness DB/run roots and read-only Genome-web source data.
 5. Only scenarios with fresh executable evidence move from `NOT_RUN`.
 6. The reference run does not publish/canonicalize production outputs.
