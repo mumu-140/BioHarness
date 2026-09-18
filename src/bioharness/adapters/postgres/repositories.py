@@ -180,6 +180,24 @@ class RunRepository:
         rows = self.session.execute(select(RunAttemptRow).where(RunAttemptRow.run_spec_id == run_spec_id).order_by(RunAttemptRow.attempt_number)).scalars().all()
         return tuple(RunAttempt.model_validate(row.payload) for row in rows)
 
+    def append_event(self, attempt_id: UUID, event_type: RunEventType, payload: dict, occurred_at: datetime) -> RunEvent:
+        self.session.execute(
+            select(RunAttemptRow.id).where(RunAttemptRow.id == attempt_id).with_for_update()
+        ).scalar_one()
+        max_seq = self.session.execute(
+            select(func.max(RunEventRow.sequence_no)).where(RunEventRow.run_attempt_id == attempt_id)
+        ).scalar_one() or 0
+        event = RunEvent(
+            id=uuid4(),
+            run_attempt_id=attempt_id,
+            sequence_no=max_seq + 1,
+            event_type=event_type,
+            payload=payload,
+            occurred_at=occurred_at,
+        )
+        self.add_event(event)
+        return event
+
     def add_event(self, value: RunEvent) -> None:
         self.session.add(RunEventRow(id=value.id, run_attempt_id=value.run_attempt_id, sequence_no=value.sequence_no, event_type=value.event_type.value, payload=_payload(value), occurred_at=value.occurred_at))
 

@@ -55,6 +55,7 @@ class RunEventType(StrEnum):
     EXECUTION_OUTCOME_UNKNOWN = "ExecutionOutcomeUnknown"
     ARTIFACT_DISCOVERED = "ArtifactDiscovered"
     ARTIFACT_REGISTERED = "ArtifactRegistered"
+    COLLECTION_FINISHED = "CollectionFinished"
     VALIDATION_REPORTED = "ValidationReported"
     RECONCILIATION_REQUIRED = "ReconciliationRequired"
     RECONCILIATION_RESOLVED = "ReconciliationResolved"
