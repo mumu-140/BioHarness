@@ -3,7 +3,7 @@
 Date: 2026-09-18
 Status: Authoritative navigation record
 
-BioHarness is currently in the architecture and acceptance-design phase. Runtime implementation does not yet exist in this repository.
+BioHarness now has a provider-agnostic P0 Core runtime kernel with executable Core tests. The Genome-web TF reference adapter and live reference acceptance remain pending, and advanced memory/pathway, Finding/Decision, canonical-publication, and remote-execution capabilities remain design targets unless a narrower document states otherwise.
 
 ## 1. Normal Reading Path
 
@@ -130,8 +130,12 @@ Current state:
 
 ```text
 architecture/contracts = DESIGNED
-BioHarness runtime = NOT_IMPLEMENTED
-acceptance scenarios = NOT_RUN
+P0 provider-agnostic Core kernel = IMPLEMENTED + TESTED
+P0.1H execution/validation hardening = IMPLEMENTED + TESTED
+Genome-web TF reference adapter = NOT_IMPLEMENTED
+Genome-web TF live acceptance scenarios = NOT_RUN
+advanced memory/pathway + Finding/Decision/Canonical runtime = NOT_IMPLEMENTED
+production publication = OUT_OF_SCOPE_P0
 ```
 
-No plan/review/prose statement is evidence that runtime behavior already works.
+Core CI is evidence only for the provider-agnostic kernel and its tested invariants. It is not evidence that the Genome-web reference slice, advanced memory architecture, or production publication has been validated.

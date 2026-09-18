@@ -273,6 +273,12 @@ Files inspected:
 - `pipeline/nextflow/main.nf`
 - `pipeline/nextflow/nextflow.config`
 - `pipeline/nextflow/README.md`
+- `pipeline/nextflow/scripts/assemble_tf_bundle.py`
+- `pipeline/scripts/build_tf_trees.py`
+- `pipeline/scripts/build_tf_tree_summary.py`
+- `pipeline/scripts/verify_tf_tree_summary.py`
+- `pipeline/nextflow/tests/integration.py`
+- `pipeline/nextflow/tests/run.sh`
 
 Observed:
 

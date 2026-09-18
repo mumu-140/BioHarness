@@ -2,8 +2,9 @@
 
 Date: 2026-09-18
 Status: Source audit / non-authoritative rationale
-Runtime status: NOT_IMPLEMENTED
-Validation status: NOT_RUN
+Core status: provider-agnostic executor/reconciliation boundary IMPLEMENTED + TESTED
+Reference adapter status: NOT_IMPLEMENTED
+Live validation status: NOT_RUN
 
 > This file records source observations that motivated the P0 boundary. Final semantics live in `scientific-contracts-and-run-semantics.md` and `p0-genome-web-tf-vertical-slice.md`. This audit never participates in precedence resolution.
 
@@ -23,6 +24,12 @@ Files:
 - `pipeline/nextflow/main.nf`
 - `pipeline/nextflow/nextflow.config`
 - `pipeline/nextflow/README.md`
+- `pipeline/nextflow/scripts/assemble_tf_bundle.py`
+- `pipeline/scripts/build_tf_trees.py`
+- `pipeline/scripts/build_tf_tree_summary.py`
+- `pipeline/scripts/verify_tf_tree_summary.py`
+- `pipeline/nextflow/tests/integration.py`
+- `pipeline/nextflow/tests/run.sh`
 
 ## Observed Provider Shape
 
@@ -106,6 +113,7 @@ These claims apply to the pinned source revision only, not to Nextflow generally
 ```text
 source_audit = COMPLETED
 observations_integrated_into_authoritative_docs = DESIGNED
-adapter_implementation = NOT_IMPLEMENTED
-runtime_validation = NOT_RUN
+provider_agnostic_core_boundary = IMPLEMENTED + TESTED
+genome_web_adapter_implementation = NOT_IMPLEMENTED
+genome_web_runtime_validation = NOT_RUN
 ```

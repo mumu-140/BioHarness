@@ -2,7 +2,7 @@
 
 Date: 2026-09-18
 Status: Authoritative stable product-boundary design
-Runtime status: NOT_IMPLEMENTED
+Runtime status: PARTIALLY_IMPLEMENTED — provider-agnostic P0 Core is implemented/tested; Genome-web reference integration and later subsystems remain pending
 Scope: Stable system boundary, ownership, provider composition, core domain roles, and V1 constraints. Detailed scientific/run semantics live in `docs/architecture/scientific-contracts-and-run-semantics.md`.
 
 ## 1. Purpose
@@ -453,8 +453,10 @@ The design is ready for implementation planning when it supports, at minimum:
 
 ```text
 architecture = DESIGNED
-runtime = NOT_IMPLEMENTED
-acceptance_scenarios = NOT_RUN
+p0_core_runtime = IMPLEMENTED + TESTED
+genome_web_reference_adapter = NOT_IMPLEMENTED
+genome_web_acceptance_scenarios = NOT_RUN
+advanced_subsystems = NOT_IMPLEMENTED unless separately stated
 ```
 
-Implementation planning should proceed in small vertical slices and must not reinterpret this design as runtime evidence.
+Core implementation evidence applies only to the tested provider-agnostic P0 subset. The Genome-web reference slice and broader V1 architecture still require their own implementation and acceptance evidence.

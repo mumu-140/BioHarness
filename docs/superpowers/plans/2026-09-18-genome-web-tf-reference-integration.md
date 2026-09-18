@@ -19,6 +19,9 @@
 - The live acceptance environment uses read-only Genome-web source data, an isolated BioHarness PostgreSQL database/schema, and an isolated writable BioHarness run root.
 - No production loader/publication/canonical mutation is allowed.
 - No local Mac execution/build/deploy.
+- Core `ResolutionService` supplies only generic logical resources plus generic task context (`task_id`, `task_revision`); provider-specific manifest/workspace paths come from reference configuration, never invented Core context keys.
+- Core `WorkflowExecutor.prepare` consumes an immutable `ExecutionDescriptor`; the reference executor MUST NOT query BioHarness repositories to reconstruct configuration.
+- The reference launch preflight rechecks frozen resolved-manifest/member identities and provider/environment constraints immediately before launch.
 
 ---
 
@@ -54,6 +57,8 @@ def test_revision_mismatch_refuses_audited_capabilities(tmp_path):
     cfg = GenomeWebTFReferenceConfig(
         repo_root=tmp_path,
         provider_revision="different",
+        input_manifest=tmp_path / "genomes.tsv",
+        planning_root=tmp_path / "planning",
         run_root=tmp_path / "runs",
     )
     with pytest.raises(RevisionMismatch):
@@ -78,7 +83,10 @@ class GenomeWebTFReferenceConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     repo_root: Path
     provider_revision: str
+    input_manifest: Path
+    planning_root: Path
     run_root: Path
+    existing_identities: Path | None = None
 
     def require_audited_revision(self) -> None:
         if self.provider_revision != AUDITED_REVISION:
@@ -120,7 +128,7 @@ git commit -m "test: define Genome-web reference integration boundary"
 
 ---
 
-### Task 2: External Data Resolution Adapter
+### Task 2: External Data Resolution Adapter and Exact Member Identity
 
 **Files:**
 - Create: `examples/reference_integrations/genome_web_tf/data_adapter.py`
@@ -128,37 +136,36 @@ git commit -m "test: define Genome-web reference integration boundary"
 
 **Interfaces:**
 - `GenomeWebTFDataAdapter(config, run_command=subprocess.run)` implements Core `DataProvider`.
-- `resolve(logical_resources, context)` requires `context["input_manifest"]` and `context["planning_workspace"]`; optional `context["existing_identities"]`.
-- Produces: Core `ProviderResolution`.
+- `resolve(logical_resources, context)` consumes only Core's generic `logical_resources` plus `context["task_id"]` / `context["task_revision"]`.
+- Provider-specific `input_manifest`, `planning_root`, and optional `existing_identities` are owned by `GenomeWebTFReferenceConfig`.
+- Produces: Core `ProviderResolution` with one `ProviderResource` per requested genome and exact resolved/member identity evidence.
 
-- [ ] **Step 1: Define typed provider error and injected command runner**
+- [ ] **Step 1: Define typed provider error and stable logical identity**
 
-```python
-class ProviderResolutionError(RuntimeError):
-    def __init__(self, exit_code: int, stderr: str):
-        self.exit_code = exit_code
-        self.stderr = stderr
-        super().__init__(f"Genome-web resolver failed with exit code {exit_code}: {stderr}")
+Define `ProviderResolutionError` that preserves provider exit code/stderr. Define one adapter-local logical URI scheme, for example:
+
+```text
+genomeweb:registered-genome:<species_id>:<five-digit-uid>
 ```
 
-The adapter constructor stores `run_command`; tests inject a fake callable rather than invoking the real external resolver.
+The scheme belongs to the reference adapter, not BioHarness Core. The requested `logical_resources` set must exactly match the genomes present in the configured acceptance manifest for P0; unexpected extra or missing rows fail rather than being silently included/repaired.
 
-- [ ] **Step 2: Test exact command construction**
+- [ ] **Step 2: Test exact external resolver command construction**
 
-Assert argv is:
+For task `<task_id>`, derive a task-scoped planning directory under `config.planning_root` and invoke:
 
 ```text
 <sys.executable>
 <external_repo>/pipeline/nextflow/scripts/validate_genomes.py
---genomes <context.input_manifest>
---output <context.planning_workspace>/genomes.resolved.tsv
+--genomes <config.input_manifest>
+--output <config.planning_root>/<task_id>/genomes.resolved.tsv
 ```
 
-Append `--existing-identities <path>` only when context contains that key. Never reproduce provider UID/table validation logic.
+Append `--existing-identities <config.existing_identities>` only when configured. Tests inject a fake command runner; the adapter never reproduces provider UID/table validation logic.
 
-- [ ] **Step 3: Implement `resolve`**
+- [ ] **Step 3: Freeze exact consumed member identity**
 
-Call the injected runner with `check=True`, `text=True`, `capture_output=True`, `shell=False` semantics. Parse only the external resolver output TSV columns required by the audited case:
+Parse only the audited resolver columns:
 
 ```text
 species_id
@@ -174,11 +181,25 @@ tf_tsv
 tf_gene_tsv
 ```
 
-Map each row to a Core `ProviderResource`. Keep `uid` as a string. Put provider-specific fields in `biological_identity`/`metadata`; do not change Core schemas to make them mandatory.
+For every resolved genome, hash the six resolved member files and record role/path/SHA-256 evidence. Hash the deterministic resolved TSV itself. Build a deterministic per-genome member-manifest digest from the role + member digest set.
 
-- [ ] **Step 4: Test leading-zero and failure propagation**
+Map each row to Core `ProviderResource`:
+- `biological_identity`: species/UID/build/annotation/release;
+- `content_identity.manifest_sha256`: resolved TSV SHA-256;
+- `content_identity.member_manifest_sha256`: per-genome member digest manifest;
+- `metadata.resolved_manifest_path`: task-scoped resolved TSV path;
+- `metadata.members`: auditable role/path/digest records.
 
-A fake TSV with `uid=00902` must return exactly `"00902"`. A fake command failure with exit code 7 and stderr `cross-uid ID collision` must become `ProviderResolutionError(7, ...)`; the adapter must not repair/rename/retry.
+Do not treat a path string alone as immutable data identity.
+
+- [ ] **Step 4: Test leading-zero identity, exact scope, and failure propagation**
+
+Tests must prove:
+- `uid=00902` remains exactly `"00902"`;
+- missing/extra logical resource rows are rejected;
+- a changed member file changes its member-manifest digest;
+- provider exit code 7 with stderr `cross-uid ID collision` becomes `ProviderResolutionError(7, ...)`;
+- the adapter does not repair/rename/retry provider failures.
 
 - [ ] **Step 5: Run and commit**
 
@@ -191,9 +212,7 @@ git add examples/reference_integrations/genome_web_tf/data_adapter.py tests/refe
 git commit -m "feat: add external Genome-web data reference adapter"
 ```
 
----
-
-### Task 3: TF Workflow Executor Adapter Without Nextflow Reimplementation
+### Task 3: TF Workflow Executor Adapter over the Core ExecutionDescriptor
 
 **Files:**
 - Create: `examples/reference_integrations/genome_web_tf/executor_adapter.py`
@@ -201,7 +220,9 @@ git commit -m "feat: add external Genome-web data reference adapter"
 
 **Interfaces:**
 - `GenomeWebTFExecutorAdapter(config)` implements Core `WorkflowExecutor`.
-- Produces: `ExecutorCapabilities`, `InvocationSpec`, `ExecutionEvidence`, artifact candidate dictionaries.
+- `prepare(execution: ExecutionDescriptor)` consumes the frozen materialized execution descriptor; it does not query BioHarness repositories.
+- `inspect(binding | None, attempt_payload)` supports binding-optional reconciliation using attempt-scoped provider evidence.
+- Produces: `ExecutorCapabilities`, `InvocationSpec`, `ExecutionEvidence`, and artifact candidate dictionaries.
 
 - [ ] **Step 1: Test audited capability snapshot**
 
@@ -220,26 +241,39 @@ trace = true
 
 A different provider revision must fail the audited-revision guard instead of inheriting the snapshot.
 
-- [ ] **Step 2: Test invocation composition**
+- [ ] **Step 2: Test invocation composition from ExecutionDescriptor**
 
-Given run payload containing `run_root`, `manifest`, `provider_attempt_name`, and explicit resolved parameters, `prepare()` returns an `InvocationSpec` whose argv begins:
+The adapter obtains:
+- isolated `run_root` from reference config;
+- exactly one consistent `resolved_manifest_path` from `execution.resolved_inputs`;
+- `provider_attempt_name` from the descriptor;
+- `min_seqs`, model/bootstrap/aLRT/seed from `execution.result_affecting_parameters`;
+- MAFFT/IQ-TREE thread controls from `execution.planned_resource_controls`.
+
+`prepare()` returns an `InvocationSpec` whose argv begins:
 
 ```text
 <external_repo>/pipeline/nextflow/run.sh
-<isolated_run_root>
-<manifest>
-<provider_attempt_name>
+<config.run_root>
+<resolved_manifest_path>
+<execution.provider_attempt_name>
 ```
 
-and appends `--min-seqs`, `--model`, `--bootstrap`, `--alrt`, `--seed`, `--mafft-threads`, `--iqtree-threads`. It MUST NOT construct `nextflow run` itself.
+and appends only audited launcher flags such as `--min-seqs`, `--model`, `--bootstrap`, `--alrt`, `--seed`, `--mafft-threads`, and `--iqtree-threads`. Pass `--existing-identities` only when configured. P0 does not use implicit `--resume last`. The adapter MUST NOT construct `nextflow run` itself.
 
-- [ ] **Step 3: Implement evidence mapping**
+- [ ] **Step 3: Implement binding-optional evidence mapping**
 
-Map existing provider paths such as `invocation.json`, `genomes.resolved.tsv`, `nextflow.log`, `trace.tsv`, and `output/candidate/manifest.json` into generic `ExecutionEvidence.evidence`. File absence is evidence absence, not success.
+Derive the attempt directory from `config.run_root / "attempts" / attempt_payload["provider_attempt_name"]`. Map only observed files such as BioHarness `process.json`, provider `invocation.json`, `genomes.resolved.tsv`, `nextflow.log`, `trace.tsv`, and `output/candidate/manifest.json` into `ExecutionEvidence.evidence`.
+
+Rules:
+- file absence is evidence absence, never success;
+- a validated candidate manifest may provide strong success evidence for this audited synchronous launcher;
+- without enough evidence to establish a terminal result, return inconclusive evidence and let Core stop at `NEEDS_OPERATOR_RECONCILIATION`;
+- do not fabricate a durable external execution ID, poll API, cancellation, or exactly-once guarantee.
 
 - [ ] **Step 4: Implement artifact discovery mapping**
 
-Return artifact candidates for provider outputs that actually exist. Roles may include `resolved_manifest`, `provider_invocation`, `execution_log`, `execution_trace`, `candidate_manifest`, `alignment`, `tree`, and audit tables. Core performs hashing/registration.
+Return artifact candidates only for provider outputs that actually exist. Roles may include `resolved_manifest`, `provider_invocation`, `execution_log`, `execution_trace`, `candidate_manifest`, `alignment`, `tree`, and audit tables. Core performs hashing/registration.
 
 - [ ] **Step 5: Run and commit**
 
@@ -252,17 +286,19 @@ git add examples/reference_integrations/genome_web_tf/executor_adapter.py tests/
 git commit -m "feat: add Genome-web TF workflow reference adapter"
 ```
 
----
-
-### Task 4: Isolated Acceptance Configuration and Dry Run
+### Task 4: Launch Preflight, Isolated Acceptance Configuration, and Dry Run
 
 **Files:**
+- Create: `examples/reference_integrations/genome_web_tf/preflight.py`
 - Create: `examples/reference_integrations/genome_web_tf/acceptance.py`
 - Create: `examples/reference_integrations/genome_web_tf/acceptance.example.toml`
+- Create: `tests/reference/test_genome_web_preflight.py`
 - Create: `tests/reference/test_acceptance_config.py`
 
 **Interfaces:**
-- Produces: validated remote/test acceptance configuration; `--dry-run` performs no provider side effect.
+- `GenomeWebTFPreflight(config, uow_factory, command_runner=...)` implements the injected Core launch-preflight callable.
+- Acceptance configuration supplies provider-specific source/planning/run/artifact paths; Core contracts remain provider-agnostic.
+- `--dry-run` performs no resolver, launcher, or workflow side effect.
 
 - [ ] **Step 1: Add example config**
 
@@ -270,6 +306,7 @@ git commit -m "feat: add Genome-web TF workflow reference adapter"
 provider_repo = "/srv/genome-web-backend"
 provider_revision = "05072cbbcd533ca59afa13996d8d0edd8f939c6e"
 input_manifest = "/srv/bioharness-p0/fixtures/genomes.tsv"
+planning_root = "/srv/bioharness-p0/planning"
 run_root = "/srv/bioharness-p0/runs"
 artifact_root = "/srv/bioharness-p0/artifacts"
 database_url_env = "BIOHARNESS_DATABASE_URL"
@@ -277,13 +314,24 @@ production_roots = ["/srv/genome-web-production"]
 read_only_source_roots = ["/srv/genome-web-data"]
 ```
 
-No credential is committed.
+Optional `existing_identities` is configured only when the acceptance fixture has the audited snapshot. No credential is committed.
 
 - [ ] **Step 2: Validate path isolation**
 
-Reject writable run/artifact paths that equal, contain, or are contained by protected production/source roots; reject `/` and the current user's home directory. Resolve symlinks before comparison.
+Reject writable planning/run/artifact paths that equal, contain, or are contained by protected production/source roots; reject `/` and the current user's home directory. Resolve symlinks before comparison.
 
-- [ ] **Step 3: Add dry-run command**
+- [ ] **Step 3: Test launch preflight against frozen RunSpec dependencies**
+
+Immediately before launch, preflight loads the RunSpec's ResolvedDataRefs/ResolvedConfiguration through the injected UoW and verifies at least:
+- `run_spec_hash` is the identity being checked;
+- provider/workflow revision still equals the audited revision;
+- every recorded resolved manifest/member SHA-256 still matches current bytes;
+- writable roots remain isolated;
+- required external launcher/tool/runtime checks are observed without modifying provider state.
+
+Return a short evidence dictionary suitable for `SubmissionIntentRecorded.preflight_evidence`. Any identity/revision/environment mismatch raises `PreflightFailed` before a RunAttempt/external side effect is created.
+
+- [ ] **Step 4: Add dry-run command**
 
 ```bash
 python -m examples.reference_integrations.genome_web_tf.acceptance \
@@ -291,20 +339,22 @@ python -m examples.reference_integrations.genome_web_tf.acceptance \
   --dry-run
 ```
 
-Dry run prints revision, resolved paths, planned adapter commands, and policy outcomes; it does not execute resolver/launcher.
+Dry run prints pinned revision, resolved paths, requested logical resources, planned `ExecutionDescriptor`-driven adapter command, preflight checks, and policy outcomes. It does not execute the resolver/launcher.
 
-- [ ] **Step 4: Run and commit**
+- [ ] **Step 5: Run and commit**
 
-Run: `python -m pytest tests/reference/test_acceptance_config.py -q`
+Run:
+
+```bash
+python -m pytest   tests/reference/test_genome_web_preflight.py   tests/reference/test_acceptance_config.py -q
+```
 
 Expected: PASS.
 
 ```bash
-git add examples/reference_integrations/genome_web_tf/acceptance.py examples/reference_integrations/genome_web_tf/acceptance.example.toml tests/reference/test_acceptance_config.py
-git commit -m "feat: add isolated reference acceptance configuration"
+git add examples/reference_integrations/genome_web_tf/preflight.py   examples/reference_integrations/genome_web_tf/acceptance.py   examples/reference_integrations/genome_web_tf/acceptance.example.toml   tests/reference/test_genome_web_preflight.py   tests/reference/test_acceptance_config.py
+git commit -m "feat: add Genome-web launch preflight and acceptance config"
 ```
-
----
 
 ### Task 5: Live Isolated Genome-web TF Acceptance Run
 
@@ -344,10 +394,12 @@ Expected: allowed protected read/resolve and candidate launch; denied production
 
 ```text
 TaskSpec
--> authorized reference DataProvider resolve
--> ResolvedDataRefs
+-> durable current authorization before reference DataProvider access
+-> exact ResolvedDataRefs/member digests
 -> ScientificAssessment/ResolvedConfiguration/RunSpec
--> current launch authorization
+-> fresh GenomeWebTFPreflight
+-> current launch authorization + durable SubmissionIntent
+-> materialized ExecutionDescriptor
 -> RunAttempt
 -> external Genome-web run.sh
 -> external Nextflow/MAFFT/IQ-TREE
@@ -414,5 +466,9 @@ This reference plan is complete only when:
 4. Live acceptance uses isolated BioHarness DB/run roots and read-only Genome-web source data.
 5. Only scenarios with fresh executable evidence move from `NOT_RUN`.
 6. The reference run does not publish/canonicalize production outputs.
+7. The DataProvider uses only generic Core resolution arguments; provider-specific manifest/planning paths remain reference configuration.
+8. The WorkflowExecutor consumes Core `ExecutionDescriptor` and does not reach back into BioHarness repositories.
+9. Fresh launch preflight rechecks resolved manifest/member identity before any external launch side effect.
+10. Binding loss is reconciled from attempt-scoped evidence when possible and otherwise stops safely at operator reconciliation.
 
 The reference integration remains an example/case after completion; it does not become a BioHarness Core dependency.
