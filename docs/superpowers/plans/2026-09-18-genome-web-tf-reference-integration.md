@@ -1,5 +1,7 @@
 # Genome-web TF Reference Integration Implementation Plan
 
+Execution status: **NOT_STARTED**. This plan begins only after P0.1H merges and is rechecked against the merge SHA.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Prove that the provider-agnostic BioHarness P0 kernel can govern the existing Genome-web TF workflow as an external reference case without absorbing Genome-web scripts, schemas, or workflow logic into BioHarness Core.

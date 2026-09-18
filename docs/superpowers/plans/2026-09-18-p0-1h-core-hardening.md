@@ -1,6 +1,8 @@
 # P0.1H Core Hardening Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+Execution status: **COMPLETED ON IMPLEMENTATION BRANCH; MERGE REVIEW PENDING**
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Close the execution/recovery invariants that are still weaker in the merged P0 Core than in the authoritative BioHarness contracts, before implementing the Genome-web reference adapter.
 
@@ -32,13 +34,13 @@
 
 **Invariant:** A new external launch must not be allocated while a prior attempt for the same RunSpec is in `SUBMITTING`, `RUNNING`, `COLLECTING`, `UNKNOWN`, or `NEEDS_OPERATOR_RECONCILIATION`. Terminal `FINISHED` or `FAILED` attempts do not block a legitimate later attempt.
 
-- [ ] Write a regression test proving a prior `SUBMITTING` attempt blocks a second allocation.
-- [ ] Run the focused test and verify RED for the intended reason.
-- [ ] Add `RUNNING` and `COLLECTING` coverage without widening scope.
-- [ ] Implement the minimal transactional check under the existing RunSpec row lock.
-- [ ] Run focused allocation/reconciliation tests and verify GREEN.
-- [ ] Run the full Core suite.
-- [ ] Commit only Task 1.
+- [x] Write a regression test proving a prior `SUBMITTING` attempt blocks a second allocation.
+- [x] Run the focused test and verify RED for the intended reason.
+- [x] Add `RUNNING` and `COLLECTING` coverage without widening scope.
+- [x] Implement the minimal transactional check under the existing RunSpec row lock.
+- [x] Run focused allocation/reconciliation tests and verify GREEN.
+- [x] Run the full Core suite.
+- [x] Commit only Task 1.
 
 ---
 
@@ -54,13 +56,14 @@
 
 **Invariant:** If the control process dies after the external process may have started but before `ExecutionBinding` is durably stored, reconciliation must still be able to inspect attempt-scoped evidence; absence of sufficient evidence remains `NEEDS_OPERATOR_RECONCILIATION`, never blind resubmission.
 
-- [ ] Write RED tests for reconciliation of an attempt with `binding=None` but attempt-scoped execution evidence present.
-- [ ] Write RED test for no binding + insufficient evidence -> `NEEDS_OPERATOR_RECONCILIATION`.
-- [ ] Introduce the smallest generic evidence contract required to support this path.
-- [ ] Make local process launch persist attempt-scoped process evidence before returning control.
-- [ ] Update reconciliation to call executor inspection even when no DB binding exists.
-- [ ] Verify focused tests, then full Core suite.
-- [ ] Commit only Task 2.
+- [x] Write RED tests for reconciliation of an attempt with `binding=None` but attempt-scoped execution evidence present.
+- [x] Write RED test for no binding + insufficient evidence -> `NEEDS_OPERATOR_RECONCILIATION`.
+- [x] Introduce the smallest generic evidence contract required to support this path.
+- [x] Make local process launch persist attempt-scoped process evidence before returning control.
+- [x] Verify that failure to persist recovery evidence after process creation is classified as ambiguous/UNKNOWN rather than a definite no-spawn failure.
+- [x] Update reconciliation to call executor inspection even when no DB binding exists.
+- [x] Verify focused tests, then full Core suite.
+- [x] Commit only Task 2.
 
 ---
 
@@ -73,12 +76,12 @@
 
 **Invariant:** For protected resolution, the ALLOW/ALLOW_WITH_WARNING PolicyDecision is committed before `DataProvider.resolve()` is invoked. A provider failure does not erase the historical fact that access was authorized; DENY/REQUIRE_APPROVAL still performs no provider read.
 
-- [ ] Write a test that records call order and fails because provider resolution currently occurs before durable decision commit.
-- [ ] Verify RED.
-- [ ] Move only the decision persistence boundary; do not change provider semantics.
-- [ ] Add provider-failure coverage proving the decision remains durable.
-- [ ] Run focused tests and full Core suite.
-- [ ] Commit only Task 3.
+- [x] Write a test that records call order and fails because provider resolution currently occurs before durable decision commit.
+- [x] Verify RED.
+- [x] Move only the decision persistence boundary; do not change provider semantics.
+- [x] Add provider-failure coverage proving the decision remains durable.
+- [x] Run focused tests and full Core suite.
+- [x] Commit only Task 3.
 
 ---
 
@@ -94,13 +97,13 @@
 
 **Invariant:** A WorkflowExecutor receives an explicit provider-agnostic execution descriptor containing the frozen workflow identity, resolved input identities, result-affecting parameters, environment/reproducibility contracts, resource controls, and attempt identity. It must not query BioHarness repositories itself, and Core must not require provider-specific fields.
 
-- [ ] Write a RED contract test expressing the descriptor that a real adapter needs.
-- [ ] Verify RED.
-- [ ] Add the minimal immutable descriptor type.
-- [ ] Materialize it from existing RunSpec + ResolvedConfiguration + ResolvedDataRefs + RunAttempt.
-- [ ] Change `WorkflowExecutor.prepare` to consume the descriptor plus attempt context, updating fakes/tests minimally.
-- [ ] Verify focused tests and full Core suite.
-- [ ] Commit only Task 4.
+- [x] Write a RED contract test expressing the descriptor that a real adapter needs.
+- [x] Verify RED.
+- [x] Add the minimal immutable descriptor type.
+- [x] Materialize it from existing RunSpec + ResolvedConfiguration + ResolvedDataRefs + RunAttempt.
+- [x] Change `WorkflowExecutor.prepare` to consume the descriptor plus attempt context, updating fakes/tests minimally.
+- [x] Verify focused tests and full Core suite.
+- [x] Commit only Task 4.
 
 ---
 
@@ -113,12 +116,13 @@
 
 **Invariant:** For the current P0 profile model, each required validation kind is satisfied by exactly one supplied report for the common evaluation subject. Duplicate reports of a required kind are rejected instead of allowing one PASS to mask another FAIL. PASS/PASS_WITH_LIMITATIONS reports used to open a gate must carry evidence.
 
-- [ ] Write RED test for PASS + FAIL of the same required kind being rejected.
-- [ ] Write RED test for gate-opening PASS report without evidence being rejected.
-- [ ] Implement the minimal exact-one-per-kind/evidence rule.
-- [ ] Preserve historical profile revision semantics.
-- [ ] Run focused validation tests and full Core suite.
-- [ ] Commit only Task 5.
+- [x] Write RED test for PASS + FAIL of the same required kind being rejected.
+- [x] Write RED test for gate-opening PASS report without evidence being rejected.
+- [x] Implement the minimal exact-one-per-kind/evidence rule.
+- [x] Preserve historical profile revision semantics.
+- [x] Recheck evidence at gate time so a legacy/directly stored positive report without evidence cannot open the gate.
+- [x] Run focused validation tests and full Core suite.
+- [x] Commit only Task 5.
 
 ---
 
@@ -134,11 +138,11 @@
 - Source-audit inspected-file list includes the Genome-web bundle/summary/verifier/integration-test evidence actually used.
 - The reference-integration plan consumes the real hardened Core interfaces, especially execution materialization and attempt-scoped reconciliation evidence.
 
-- [ ] Compare final Core ports to `2026-09-18-genome-web-tf-reference-integration.md`.
-- [ ] Remove stale assumptions such as provider-specific context fields that Core does not supply.
-- [ ] Update status language without marking live Genome-web scenarios PASS.
-- [ ] Run documentation/code consistency searches and full Core CI.
-- [ ] Commit only Task 6.
+- [x] Compare final Core ports to `2026-09-18-genome-web-tf-reference-integration.md`.
+- [x] Remove stale assumptions such as provider-specific context fields that Core does not supply.
+- [x] Update status language without marking live Genome-web scenarios PASS.
+- [x] Run documentation/code consistency searches and full Core CI.
+- [x] Commit only Task 6.
 
 ---
 

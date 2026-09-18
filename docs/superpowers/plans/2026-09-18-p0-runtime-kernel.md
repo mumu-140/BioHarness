@@ -1,5 +1,7 @@
 # BioHarness P0 Runtime Kernel Implementation Plan
 
+Execution status: **COMPLETED AND MERGED VIA PR #2**. Subsequent execution/reconciliation/validation hardening is tracked in `2026-09-18-p0-1h-core-hardening.md`. The checklist below is retained as the implementation script/audit trail rather than the live status source.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the first provider-agnostic BioHarness Research Control Plane kernel that can plan, authorize, execute, reconcile, register evidence, validate, and recall one governed scientific run without depending on Genome-web or any agent runtime.
