@@ -207,7 +207,7 @@ def test_preflight_rechecks_frozen_identity_and_revision(tmp_path):
     non_git = [call for call in runner.calls if call[0][0] != "git"]
     assert non_git == [
         (
-            (str(cfg.launcher), "--help"),
+            ("bash", str(cfg.launcher), "--help"),
             {"check": False, "text": True, "capture_output": True},
         )
     ]

@@ -137,6 +137,7 @@ def test_prepare_composes_only_audited_launcher_command(tmp_path):
 
     manifest = execution.resolved_inputs[0]["metadata"]["resolved_manifest_path"]
     assert invocation.argv == (
+        "bash",
         str(cfg.launcher),
         str(cfg.run_root),
         manifest,
