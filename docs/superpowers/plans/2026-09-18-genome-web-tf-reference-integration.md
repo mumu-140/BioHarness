@@ -294,11 +294,14 @@ The returned `InvocationSpec` writes wrapper stdout/stderr under `config.control
 `prepare()` returns an `InvocationSpec` whose argv begins:
 
 ```text
+bash
 <external_repo>/pipeline/nextflow/run.sh
 <config.run_root>
 <resolved_manifest_path>
 <execution.provider_attempt_name>
 ```
+
+The explicit `bash` prefix is part of the reference contract so the adapter does not depend on the checkout preserving the launcher's executable bit.
 
 and appends only audited launcher flags such as `--min-seqs`, `--model`, `--bootstrap`, `--alrt`, `--seed`, `--mafft-threads`, and `--iqtree-threads`. Pass `--existing-identities` only when configured. P0 does not use implicit `--resume last`. The adapter MUST NOT construct `nextflow run` itself.
 
