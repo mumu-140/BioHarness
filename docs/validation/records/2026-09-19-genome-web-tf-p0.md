@@ -34,6 +34,23 @@ Observed isolated runtime:
 - acceptance root writable inside acceptance container: **yes**
 - `/data/miniconda3` writable inside acceptance container: **no**
 
+Post-run read-only checksum verification of the existing production Genome-web tree matched the pre-run baseline for all ten inspected TF/runtime files:
+
+| Production file | Pre-run SHA-256 = post-run SHA-256 |
+| --- | --- |
+| `pipeline/config.sh` | `76fb20c7e754443714dbf0abb0a4fc50eb7cc4fa1293bea7c05a572221d27b39` |
+| `pipeline/nextflow/run.sh` | `ae0361e90b103719fd345f70cd07ec54d61d43a6969030bc056307c4afe858f1` |
+| `pipeline/nextflow/scripts/run.py` | `33f497e46c6f35efa0f0ab61ab82831789f772181d0f817b29c1affdc7674cab` |
+| `pipeline/nextflow/main.nf` | `cf99b2b67fea5f2398b255d17ba89183ca5f7a602591077b9722d4ddf9cfc278` |
+| `pipeline/nextflow/nextflow.config` | `167591f2b3037acbafd2fa38875403524af70a6515ac5ef64f8cedb41e7610e3` |
+| `pipeline/nextflow/scripts/validate_genomes.py` | `cdde71c4e37988906eda3b0e91774b8382c75d819da4434b5d379bdeb5454814` |
+| `pipeline/nextflow/scripts/assemble_tf_bundle.py` | `1248b6f684bfc5107e6c5d1b145ab41400a96d3aeb1846b258e62903c63881c4` |
+| `pipeline/scripts/build_tf_trees.py` | `1c02af33cd6a38f0cc1fce0b4f51ea4c88ad2472657a866844a5a596dbdcb95f` |
+| `pipeline/scripts/build_tf_tree_summary.py` | `5edacf117dcf0f194209bb15da976a42ae37dbc4ef675a5a4bf90f5560211bc3` |
+| `pipeline/scripts/verify_tf_tree_summary.py` | `49a3639c6c12b55db6818ba9d457f3f0e4d16cccd4656dc73752e7288d0278e0` |
+
+The production `config.sh` already differed from the audited repository revision before acceptance; the live acceptance therefore used the clean, detached, exact audited checkout under the isolated acceptance workspace instead of the production tree.
+
 Acceptance configuration SHA-256:
 
 `f1cdef9b7353ab25161315afb5fb6499947bdf4df2c56baaa764b81aa35554d3`
