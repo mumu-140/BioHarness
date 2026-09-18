@@ -21,6 +21,10 @@ class GenomeWebTFReferenceConfig(BaseModel):
     planning_root: Path
     control_root: Path
     run_root: Path
+    artifact_root: Path | None = None
+    database_url_env: str = "BIOHARNESS_DATABASE_URL"
+    production_roots: tuple[Path, ...] = ()
+    read_only_source_roots: tuple[Path, ...] = ()
     existing_identities: Path | None = None
 
     def require_audited_revision(self, *, observed_revision: str) -> None:
