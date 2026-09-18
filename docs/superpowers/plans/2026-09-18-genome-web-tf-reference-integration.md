@@ -22,6 +22,7 @@
 - Core `ResolutionService` supplies only generic logical resources plus generic task context (`task_id`, `task_revision`); provider-specific manifest/workspace paths come from reference configuration, never invented Core context keys.
 - Core `WorkflowExecutor.prepare` consumes an immutable `ExecutionDescriptor`; the reference executor MUST NOT query BioHarness repositories to reconstruct configuration.
 - The reference launch preflight rechecks frozen resolved-manifest/member identities and provider/environment constraints immediately before launch.
+- BioHarness local-process stdout/stderr/`process.json` use a separate reference `control_root`; they MUST NOT pre-create Genome-web's provider-owned `run_root/attempts/<attempt>` directory, because the audited launcher requires that provider attempt directory not already exist.
 
 ---
 
@@ -59,6 +60,7 @@ def test_revision_mismatch_refuses_audited_capabilities(tmp_path):
         provider_revision="different",
         input_manifest=tmp_path / "genomes.tsv",
         planning_root=tmp_path / "planning",
+        control_root=tmp_path / "control",
         run_root=tmp_path / "runs",
     )
     with pytest.raises(RevisionMismatch):
@@ -85,6 +87,7 @@ class GenomeWebTFReferenceConfig(BaseModel):
     provider_revision: str
     input_manifest: Path
     planning_root: Path
+    control_root: Path
     run_root: Path
     existing_identities: Path | None = None
 
@@ -152,7 +155,7 @@ The scheme belongs to the reference adapter, not BioHarness Core. The requested 
 
 - [ ] **Step 2: Test exact external resolver command construction**
 
-For task `<task_id>`, derive a task-scoped planning directory under `config.planning_root` and invoke:
+For task `<task_id>`, create a task-scoped planning directory under `config.planning_root` and invoke:
 
 ```text
 <sys.executable>
@@ -244,11 +247,13 @@ A different provider revision must fail the audited-revision guard instead of in
 - [ ] **Step 2: Test invocation composition from ExecutionDescriptor**
 
 The adapter obtains:
-- isolated `run_root` from reference config;
+- isolated provider `run_root` and separate BioHarness `control_root` from reference config;
 - exactly one consistent `resolved_manifest_path` from `execution.resolved_inputs`;
 - `provider_attempt_name` from the descriptor;
 - `min_seqs`, model/bootstrap/aLRT/seed from `execution.result_affecting_parameters`;
 - MAFFT/IQ-TREE thread controls from `execution.planned_resource_controls`.
+
+The returned `InvocationSpec` writes wrapper stdout/stderr under `config.control_root / execution.provider_attempt_name`. This lets `LocalProcessRunner` persist `process.json` there without creating the provider-owned `config.run_root / "attempts" / execution.provider_attempt_name` directory before `run.sh` starts.
 
 `prepare()` returns an `InvocationSpec` whose argv begins:
 
@@ -263,7 +268,11 @@ and appends only audited launcher flags such as `--min-seqs`, `--model`, `--boot
 
 - [ ] **Step 3: Implement binding-optional evidence mapping**
 
-Derive the attempt directory from `config.run_root / "attempts" / attempt_payload["provider_attempt_name"]`. Map only observed files such as BioHarness `process.json`, provider `invocation.json`, `genomes.resolved.tsv`, `nextflow.log`, `trace.tsv`, and `output/candidate/manifest.json` into `ExecutionEvidence.evidence`.
+Derive two evidence locations:
+- BioHarness control evidence: `config.control_root / attempt_payload["provider_attempt_name"]` for `process.json` and wrapper stdout/stderr;
+- provider attempt evidence: `config.run_root / "attempts" / attempt_payload["provider_attempt_name"]` for provider `invocation.json`, `genomes.resolved.tsv`, `nextflow.log`, `trace.tsv`, and `output/candidate/manifest.json`.
+
+Map only observed files from those locations into `ExecutionEvidence.evidence`.
 
 Rules:
 - file absence is evidence absence, never success;
@@ -307,6 +316,7 @@ provider_repo = "/srv/genome-web-backend"
 provider_revision = "05072cbbcd533ca59afa13996d8d0edd8f939c6e"
 input_manifest = "/srv/bioharness-p0/fixtures/genomes.tsv"
 planning_root = "/srv/bioharness-p0/planning"
+control_root = "/srv/bioharness-p0/control"
 run_root = "/srv/bioharness-p0/runs"
 artifact_root = "/srv/bioharness-p0/artifacts"
 database_url_env = "BIOHARNESS_DATABASE_URL"
@@ -318,7 +328,7 @@ Optional `existing_identities` is configured only when the acceptance fixture ha
 
 - [ ] **Step 2: Validate path isolation**
 
-Reject writable planning/run/artifact paths that equal, contain, or are contained by protected production/source roots; reject `/` and the current user's home directory. Resolve symlinks before comparison.
+Reject writable planning/control/run/artifact paths that equal, contain, or are contained by protected production/source roots; reject `/` and the current user's home directory. Resolve symlinks before comparison. Also reject `control_root` paths that would overlap the provider-owned `run_root/attempts` namespace.
 
 - [ ] **Step 3: Test launch preflight against frozen RunSpec dependencies**
 
@@ -470,5 +480,6 @@ This reference plan is complete only when:
 8. The WorkflowExecutor consumes Core `ExecutionDescriptor` and does not reach back into BioHarness repositories.
 9. Fresh launch preflight rechecks resolved manifest/member identity before any external launch side effect.
 10. Binding loss is reconciled from attempt-scoped evidence when possible and otherwise stops safely at operator reconciliation.
+11. BioHarness wrapper evidence uses `control_root` and never pre-creates the Genome-web provider attempt directory before the audited launcher does.
 
 The reference integration remains an example/case after completion; it does not become a BioHarness Core dependency.
