@@ -247,6 +247,8 @@ git add examples/reference_integrations/genome_web_tf/data_adapter.py tests/refe
 git commit -m "feat: add external Genome-web data reference adapter"
 ```
 
+---
+
 ### Task 3: TF Workflow Executor Adapter over the Core ExecutionDescriptor
 
 **Files:**
@@ -329,6 +331,8 @@ git add examples/reference_integrations/genome_web_tf/executor_adapter.py tests/
 git commit -m "feat: add Genome-web TF workflow reference adapter"
 ```
 
+---
+
 ### Task 4: Launch Preflight, Isolated Acceptance Configuration, and Dry Run
 
 **Files:**
@@ -390,15 +394,23 @@ Dry run prints pinned revision, resolved paths, requested logical resources, pla
 Run:
 
 ```bash
-python -m pytest   tests/reference/test_genome_web_preflight.py   tests/reference/test_acceptance_config.py -q
+python -m pytest \
+  tests/reference/test_genome_web_preflight.py \
+  tests/reference/test_acceptance_config.py -q
 ```
 
 Expected: PASS.
 
 ```bash
-git add examples/reference_integrations/genome_web_tf/preflight.py   examples/reference_integrations/genome_web_tf/acceptance.py   examples/reference_integrations/genome_web_tf/acceptance.example.toml   tests/reference/test_genome_web_preflight.py   tests/reference/test_acceptance_config.py
+git add examples/reference_integrations/genome_web_tf/preflight.py \
+  examples/reference_integrations/genome_web_tf/acceptance.py \
+  examples/reference_integrations/genome_web_tf/acceptance.example.toml \
+  tests/reference/test_genome_web_preflight.py \
+  tests/reference/test_acceptance_config.py
 git commit -m "feat: add Genome-web launch preflight and acceptance config"
 ```
+
+---
 
 ### Task 5: Live Isolated Genome-web TF Acceptance Run
 
