@@ -94,6 +94,18 @@ class ValidationService:
                 raise ValueError(
                     f"validation requirement {requirement.kind!r} requires exactly one report"
                 )
+            if (
+                matching
+                and matching[0].outcome
+                in {
+                    ValidationOutcome.PASS,
+                    ValidationOutcome.PASS_WITH_LIMITATIONS,
+                }
+                and not matching[0].evidence_refs
+            ):
+                raise ValueError(
+                    f"validation requirement {requirement.kind!r} positive outcome requires evidence"
+                )
             accepted = [
                 report
                 for report in matching
