@@ -105,7 +105,13 @@ def state(tmp_path):
             "revision": AUDITED,
         },
         result_affecting_parameters={"min_seqs": 4},
-        environment_contract={"nextflow": "25.10.4"},
+        environment_contract={
+            "nextflow": "25.10.4",
+            "provider_python": "3.10.12",
+            "biopython": "1.78",
+            "mafft": "7.526",
+            "iqtree3": "3.1.2",
+        },
         reproducibility_contract={"class": "DETERMINISTIC"},
         validation_profile_id=base.validation_profile_id,
         validation_profile_revision=base.validation_profile_revision,
@@ -124,6 +130,10 @@ def state(tmp_path):
         artifact_root=tmp_path / "artifacts",
         production_roots=(tmp_path / "production",),
         read_only_source_roots=(source_root,),
+        nextflow_executable=tmp_path / "runtime" / "nextflow",
+        provider_python=tmp_path / "runtime" / "python",
+        mafft_executable=tmp_path / "runtime" / "mafft",
+        iqtree_executable=tmp_path / "runtime" / "iqtree3",
     )
     return config, run_spec, configuration, ref, members
 
@@ -156,9 +166,27 @@ class Uow:
 
 
 class CommandRunner:
-    def __init__(self, *, revision=AUDITED, launcher_returncode=0):
+    DEFAULT_VERSIONS = {
+        "nextflow": "25.10.4",
+        "provider_python": "3.10.12",
+        "biopython": "1.78",
+        "mafft": "7.526",
+        "iqtree3": "3.1.2",
+    }
+
+    def __init__(
+        self,
+        *,
+        revision=AUDITED,
+        launcher_returncode=0,
+        versions=None,
+        ps_returncode=0,
+    ):
         self.revision = revision
         self.launcher_returncode = launcher_returncode
+        self.versions = dict(self.DEFAULT_VERSIONS)
+        self.versions.update(versions or {})
+        self.ps_returncode = ps_returncode
         self.calls = []
 
     def __call__(self, argv, **kwargs):
@@ -170,10 +198,54 @@ class CommandRunner:
                 stdout=self.revision + "\n",
                 stderr="",
             )
+        if argv[0] == "bash":
+            return SimpleNamespace(
+                returncode=self.launcher_returncode,
+                stdout="usage\n" if not self.launcher_returncode else "",
+                stderr="launcher unavailable" if self.launcher_returncode else "",
+            )
+        if argv == ("ps", "--version"):
+            return SimpleNamespace(
+                returncode=self.ps_returncode,
+                stdout="procps-ng 4.0.4\n" if not self.ps_returncode else "",
+                stderr="ps unavailable" if self.ps_returncode else "",
+            )
+
+        name = Path(argv[0]).name
+        if name == "nextflow":
+            return SimpleNamespace(
+                returncode=0,
+                stdout=f"version {self.versions['nextflow']} build 11173\n",
+                stderr="",
+            )
+        if name == "python" and argv[1:] == ("--version",):
+            return SimpleNamespace(
+                returncode=0,
+                stdout=f"Python {self.versions['provider_python']}\n",
+                stderr="",
+            )
+        if name == "python" and argv[1] == "-c":
+            return SimpleNamespace(
+                returncode=0,
+                stdout=self.versions["biopython"] + "\n",
+                stderr="",
+            )
+        if name == "mafft":
+            return SimpleNamespace(
+                returncode=0,
+                stdout="",
+                stderr=f"v{self.versions['mafft']} (2024/Apr/26)\n",
+            )
+        if name == "iqtree3":
+            return SimpleNamespace(
+                returncode=0,
+                stdout=f"IQ-TREE version {self.versions['iqtree3']} for Linux\n",
+                stderr="",
+            )
         return SimpleNamespace(
-            returncode=self.launcher_returncode,
-            stdout="usage\n" if not self.launcher_returncode else "",
-            stderr="launcher unavailable" if self.launcher_returncode else "",
+            returncode=127,
+            stdout="",
+            stderr=f"unexpected command: {argv}",
         )
 
 
@@ -203,14 +275,27 @@ def test_preflight_rechecks_frozen_identity_and_revision(tmp_path):
             "member_manifest_sha256": ref.member_manifest_sha256,
         }
     ]
-    assert evidence["environment"]["launcher_help"] == "PASS"
-    non_git = [call for call in runner.calls if call[0][0] != "git"]
-    assert non_git == [
-        (
-            ("bash", str(cfg.launcher), "--help"),
-            {"check": False, "text": True, "capture_output": True},
-        )
-    ]
+    assert evidence["environment"] == {
+        "launcher_help": "PASS",
+        "nextflow": "25.10.4",
+        "provider_python": "3.10.12",
+        "biopython": "1.78",
+        "mafft": "7.526",
+        "iqtree3": "3.1.2",
+        "ps": "PASS",
+    }
+    non_git_commands = [call[0] for call in runner.calls if call[0][0] != "git"]
+    assert ("bash", str(cfg.launcher), "--help") in non_git_commands
+    assert (str(cfg.nextflow_executable), "-version") in non_git_commands
+    assert (str(cfg.provider_python), "--version") in non_git_commands
+    assert (
+        str(cfg.provider_python),
+        "-c",
+        "import Bio; print(Bio.__version__)",
+    ) in non_git_commands
+    assert (str(cfg.mafft_executable), "--version") in non_git_commands
+    assert (str(cfg.iqtree_executable), "--version") in non_git_commands
+    assert ("ps", "--version") in non_git_commands
 
 
 def test_preflight_rejects_member_tampering(tmp_path):
@@ -249,4 +334,25 @@ def test_preflight_rejects_provider_revision_or_environment_drift(tmp_path):
         launcher_returncode=9,
     )
     with pytest.raises(PreflightFailed, match="launcher"):
+        check(run_spec)
+
+
+
+def test_preflight_rejects_runtime_contract_version_drift(tmp_path):
+    check, _, _, run_spec, _, _, _ = make_preflight(
+        tmp_path,
+        versions={"mafft": "7.525"},
+    )
+
+    with pytest.raises(PreflightFailed, match="environment.*mafft"):
+        check(run_spec)
+
+
+def test_preflight_rejects_missing_process_metrics_tool(tmp_path):
+    check, _, _, run_spec, _, _, _ = make_preflight(
+        tmp_path,
+        ps_returncode=127,
+    )
+
+    with pytest.raises(PreflightFailed, match="ps"):
         check(run_spec)
