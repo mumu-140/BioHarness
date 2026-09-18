@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from bioharness.domain.policy import PolicyOutcome
-from bioharness.domain.run import RunAttemptState, RunEventType
+from bioharness.domain.run import RunAttemptState, RunEventType, UnresolvedAttemptExists
 
 
 class LaunchDenied(RuntimeError):
@@ -61,7 +61,9 @@ class ExecutionService:
         ):
             raise PriorAttemptUnresolved(str(run_spec_id))
 
-        self.preflight(run_spec)
+        preflight_evidence = self.preflight(run_spec)
+        if not isinstance(preflight_evidence, dict):
+            raise PreflightFailed("preflight must return a dictionary evidence record")
         decision = self.policy.evaluate(actor, "launch", f"runspec:{run_spec_id}", {"run_spec_hash": run_spec.run_spec_hash})
         if decision.outcome in {PolicyOutcome.DENY, PolicyOutcome.REQUIRE_APPROVAL}:
             with self.uow_factory() as uow:
@@ -70,15 +72,19 @@ class ExecutionService:
             raise LaunchDenied(f"launch not authorized: {decision.outcome.value}")
 
         capabilities = self.executor.capabilities().model_dump(mode="json")
-        with self.uow_factory() as uow:
-            attempt = uow.runs.allocate_attempt_intent(
-                run_spec_id=run_spec.id,
-                decision=decision,
-                capability_snapshot=capabilities,
-                executor_namespace=self.executor_namespace,
-                now=self.clock(),
-            )
-            uow.commit()
+        try:
+            with self.uow_factory() as uow:
+                attempt = uow.runs.allocate_attempt_intent(
+                    run_spec_id=run_spec.id,
+                    decision=decision,
+                    capability_snapshot=capabilities,
+                    executor_namespace=self.executor_namespace,
+                    preflight_evidence=preflight_evidence,
+                    now=self.clock(),
+                )
+                uow.commit()
+        except UnresolvedAttemptExists as exc:
+            raise PriorAttemptUnresolved(str(run_spec_id)) from exc
 
         try:
             invocation = self.executor.prepare(run_spec.model_dump(mode="json"), attempt.model_dump(mode="json"))
@@ -96,6 +102,22 @@ class ExecutionService:
 
         try:
             binding = self.process_runner.spawn(invocation)
+        except OSError as exc:
+            with self.uow_factory() as uow:
+                failed = uow.runs.transition(
+                    attempt.id,
+                    RunAttemptState.FAILED,
+                    RunEventType.EXECUTION_EXITED,
+                    {
+                        "phase": "spawn",
+                        "process_started": False,
+                        "error": type(exc).__name__,
+                        "message": str(exc),
+                    },
+                    self.clock(),
+                )
+                uow.commit()
+            return failed
         except Exception as exc:
             with self.uow_factory() as uow:
                 unknown = uow.runs.transition(

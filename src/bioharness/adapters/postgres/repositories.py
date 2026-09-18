@@ -17,6 +17,7 @@ from bioharness.domain.run import (
     RunEvent,
     RunEventType,
     RunSpec,
+    UnresolvedAttemptExists,
     allowed_transition,
 )
 from bioharness.domain.task import ScientificTaskSpec
@@ -101,12 +102,27 @@ class RunRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def allocate_attempt_intent(self, *, run_spec_id: UUID, decision: PolicyDecision, capability_snapshot: dict, executor_namespace: str, now: datetime) -> RunAttempt:
+    def allocate_attempt_intent(self, *, run_spec_id: UUID, decision: PolicyDecision, capability_snapshot: dict, executor_namespace: str, preflight_evidence: dict, now: datetime) -> RunAttempt:
         spec_row = self.session.execute(
             select(RunSpecRow).where(RunSpecRow.id == run_spec_id).with_for_update()
         ).scalar_one()
         if not spec_row.executable:
             raise ValueError("RunSpec is not executable")
+        unresolved_id = self.session.execute(
+            select(RunAttemptRow.id)
+            .where(
+                RunAttemptRow.run_spec_id == run_spec_id,
+                RunAttemptRow.state.in_([
+                    RunAttemptState.UNKNOWN.value,
+                    RunAttemptState.NEEDS_OPERATOR_RECONCILIATION.value,
+                ]),
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+        if unresolved_id is not None:
+            raise UnresolvedAttemptExists(
+                f"unresolved prior attempt blocks allocation for RunSpec {run_spec_id}"
+            )
         max_number = self.session.execute(
             select(func.max(RunAttemptRow.attempt_number)).where(RunAttemptRow.run_spec_id == run_spec_id)
         ).scalar_one()
@@ -130,7 +146,11 @@ class RunRepository:
         for seq, event_type, payload in (
             (1, RunEventType.ATTEMPT_CREATED, {"run_spec_id": str(run_spec_id)}),
             (2, RunEventType.AUTHORIZATION_CHECKED, {"policy_decision_id": str(decision.id)}),
-            (3, RunEventType.SUBMISSION_INTENT_RECORDED, {"submission_key": attempt.submission_key}),
+            (3, RunEventType.SUBMISSION_INTENT_RECORDED, {
+                "submission_key": attempt.submission_key,
+                "run_spec_hash": spec_row.run_spec_hash,
+                "preflight_evidence": preflight_evidence,
+            }),
         ):
             self.add_event(RunEvent(
                 id=uuid4(), run_attempt_id=attempt.id, sequence_no=seq,

@@ -9,6 +9,10 @@ from bioharness.domain.base import FrozenRecord
 from bioharness.ports.workflow_executor import ExecutionBinding
 
 
+class UnresolvedAttemptExists(RuntimeError):
+    pass
+
+
 class RunAttemptState(StrEnum):
     SUBMITTING = "SUBMITTING"
     RUNNING = "RUNNING"
