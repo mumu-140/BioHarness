@@ -102,9 +102,29 @@ class PlanningService:
             "output_intent": task.output_intent.value,
             "unresolved_fields": list(task.unresolved_fields),
         }
+        with self.uow_factory() as uow:
+            resolved_refs = []
+            for ref_id in resolved_data_ref_ids:
+                ref = uow.planning.get_data_ref(ref_id)
+                if ref is None:
+                    raise LookupError(f"ResolvedDataRef not found: {ref_id}")
+                resolved_refs.append(ref)
+        input_identities = tuple(
+            {
+                "provider": ref.provider,
+                "provider_revision": ref.provider_revision,
+                "resource_type": ref.resource_type,
+                "logical_uri": ref.logical_uri,
+                "content_sha256": ref.content_sha256,
+                "manifest_sha256": ref.manifest_sha256,
+                "member_manifest_sha256": ref.member_manifest_sha256,
+                "biological_identity": ref.biological_identity,
+            }
+            for ref in resolved_refs
+        )
         analysis = analysis_projection(
             task_semantics=task_semantics,
-            input_identities=tuple({"resolved_data_ref_id": str(ref_id)} for ref_id in resolved_data_ref_ids),
+            input_identities=input_identities,
             workflow_identity=provider_workflow_identity,
             result_affecting_parameters=result_affecting_parameters,
             environment_contract=environment_contract,
