@@ -38,3 +38,11 @@ def test_command_delegates_to_injected_runtime():
     assert result.exit_code == 0
     assert calls == [("task_show", "task-1")]
     assert '"revision": 1' in result.stdout
+
+
+
+def test_root_help_states_runtime_composition_boundary():
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "runtime composition" in result.stdout.lower()
+    assert "deployment/reference integration" in result.stdout.lower()
