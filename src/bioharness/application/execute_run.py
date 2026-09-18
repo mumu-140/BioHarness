@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from bioharness.domain.policy import PolicyOutcome
+from bioharness.domain.run import RunAttemptState, RunEventType
 
 
 class LaunchDenied(RuntimeError):
@@ -63,4 +64,36 @@ class ExecutionService:
                 now=self.clock(),
             )
             uow.commit()
-        return attempt
+
+        try:
+            invocation = self.executor.prepare(run_spec.model_dump(mode="json"), attempt.model_dump(mode="json"))
+        except Exception as exc:
+            with self.uow_factory() as uow:
+                failed = uow.runs.transition(
+                    attempt.id,
+                    RunAttemptState.FAILED,
+                    RunEventType.EXECUTION_EXITED,
+                    {"phase": "prepare", "error": type(exc).__name__, "message": str(exc)},
+                    self.clock(),
+                )
+                uow.commit()
+            return failed
+
+        try:
+            binding = self.process_runner.spawn(invocation)
+        except Exception as exc:
+            with self.uow_factory() as uow:
+                unknown = uow.runs.transition(
+                    attempt.id,
+                    RunAttemptState.UNKNOWN,
+                    RunEventType.EXECUTION_OUTCOME_UNKNOWN,
+                    {"phase": "spawn", "error": type(exc).__name__, "message": str(exc)},
+                    self.clock(),
+                )
+                uow.commit()
+            return unknown
+
+        with self.uow_factory() as uow:
+            running = uow.runs.bind_execution(attempt.id, binding, self.clock())
+            uow.commit()
+        return running

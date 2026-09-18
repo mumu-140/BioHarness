@@ -152,6 +152,23 @@ class RunRepository:
             last_reconciled_at=value.last_reconciled_at,
         ))
 
+    def bind_execution(self, attempt_id: UUID, binding, occurred_at: datetime) -> RunAttempt:
+        row = self.session.execute(
+            select(RunAttemptRow).where(RunAttemptRow.id == attempt_id).with_for_update()
+        ).scalar_one()
+        current = RunAttempt.model_validate(row.payload)
+        if not allowed_transition(current.state, RunAttemptState.RUNNING):
+            raise ValueError(f"illegal RunAttempt transition {current.state} -> RUNNING")
+        updated = current.model_copy(update={"binding": binding, "state": RunAttemptState.RUNNING})
+        row.state = RunAttemptState.RUNNING.value
+        row.payload = _payload(updated)
+        max_seq = self.session.execute(
+            select(func.max(RunEventRow.sequence_no)).where(RunEventRow.run_attempt_id == attempt_id)
+        ).scalar_one() or 0
+        self.add_event(RunEvent(id=uuid4(), run_attempt_id=attempt_id, sequence_no=max_seq + 1, event_type=RunEventType.EXTERNAL_PROCESS_BOUND, payload={"binding": binding.model_dump(mode="json")}, occurred_at=occurred_at))
+        self.add_event(RunEvent(id=uuid4(), run_attempt_id=attempt_id, sequence_no=max_seq + 2, event_type=RunEventType.EXECUTION_STARTED, payload={}, occurred_at=occurred_at))
+        return updated
+
     def get_attempt(self, value_id: UUID, *, for_update: bool = False) -> RunAttempt | None:
         stmt = select(RunAttemptRow).where(RunAttemptRow.id == value_id)
         if for_update:
