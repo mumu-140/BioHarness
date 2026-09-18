@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+import pytest
+
 from bioharness.application.validate_run import ValidationService
 from bioharness.domain.validation import (
     ValidationOutcome,
@@ -75,6 +77,19 @@ def test_all_required_typed_reports_pass_candidate_gate():
     evaluation=service.evaluate("candidate", "1", tuple(r.id for r in reports))
     assert evaluation.outcome is ValidationOutcome.PASS
     assert evaluation.report_ids == tuple(r.id for r in reports)
+
+
+def test_mixed_subject_reports_cannot_satisfy_one_gate():
+    repo=ValidationRepo(); repo.add_profile(candidate_v1())
+    service=ValidationService(uow_factory=lambda: Uow(repo), clock=lambda: NOW)
+    reports=[
+        service.report(kind="provider_contract", subject_type="run_attempt", subject_id="ra-1", validator="provider", validator_revision="1", outcome=ValidationOutcome.PASS, evidence_refs=("e:1",)),
+        service.report(kind="artifact_integrity", subject_type="run_attempt", subject_id="ra-2", validator="bioharness", validator_revision="1", outcome=ValidationOutcome.PASS, evidence_refs=("e:2",)),
+        service.report(kind="provenance_completeness", subject_type="run_attempt", subject_id="ra-1", validator="bioharness", validator_revision="1", outcome=ValidationOutcome.PASS, evidence_refs=("e:3",)),
+    ]
+    with pytest.raises(ValueError, match="subject"):
+        service.evaluate("candidate", "1", tuple(r.id for r in reports))
+    assert repo.evaluations == []
 
 
 def test_profile_revision_is_historical_not_rewritten():

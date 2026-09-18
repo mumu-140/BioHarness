@@ -48,10 +48,32 @@ def test_ambiguous_spawn_leaves_single_unknown_attempt():
     executor=FakeWorkflowExecutor(); runner=FakeProcessRunner(raise_after_possible_spawn=True)
     service=ExecutionService(
         policy=FakePolicyEvaluator(), executor=executor, process_runner=runner,
-        uow_factory=lambda: Uow(planning,runs), preflight=lambda _: {}, clock=lambda: NOW,
+        uow_factory=lambda: Uow(planning,runs), preflight=lambda _: {"checked": True}, clock=lambda: NOW,
     )
     attempt=service.start(spec.id, actor="alice")
     assert attempt.state is RunAttemptState.UNKNOWN
     assert runner.spawn_calls == 1
     assert executor.prepare_calls == 1
     assert runs.events == [RunEventType.EXECUTION_OUTCOME_UNKNOWN]
+
+
+class KnownNoSpawnFailureRunner:
+    def __init__(self):
+        self.spawn_calls = 0
+
+    def spawn(self, invocation):
+        self.spawn_calls += 1
+        raise FileNotFoundError("executable not found")
+
+
+def test_known_no_spawn_failure_is_failed_not_unknown():
+    spec=make_run_spec(); planning=Planning(spec); runs=Runs(spec)
+    runner=KnownNoSpawnFailureRunner()
+    service=ExecutionService(
+        policy=FakePolicyEvaluator(), executor=FakeWorkflowExecutor(), process_runner=runner,
+        uow_factory=lambda: Uow(planning,runs), preflight=lambda _: {"checked": True}, clock=lambda: NOW,
+    )
+    attempt=service.start(spec.id, actor="alice")
+    assert attempt.state is RunAttemptState.FAILED
+    assert runner.spawn_calls == 1
+    assert runs.events == [RunEventType.EXECUTION_EXITED]
