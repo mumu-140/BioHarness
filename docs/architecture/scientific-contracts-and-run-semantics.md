@@ -2,8 +2,8 @@
 
 Date: 2026-09-18
 Status: Authoritative design record
-Runtime status: NOT_IMPLEMENTED
-Validation status: NOT_RUN
+Runtime status: PARTIALLY_IMPLEMENTED — provider-agnostic P0 Core enforces the currently implemented subset
+Validation status: CORE TESTED; Genome-web reference scenarios NOT_RUN
 Scope: Scientific intent, analysis feasibility, authorization, data identity, configuration, execution identity/recovery, validation, findings, provenance, reproducibility, canonical state, and context boundaries.
 
 Related authoritative records:
@@ -581,8 +581,10 @@ P0 does not validate remote Slurm/SSH/Kubernetes or generic WES/TES behavior.
 
 ```text
 contract_status = DESIGNED
-runtime_status = NOT_IMPLEMENTED
+p0_core_runtime = IMPLEMENTED + TESTED
+genome_web_reference_adapter = NOT_IMPLEMENTED
 scenario_validation = NOT_RUN
+broader_contract_runtime = NOT_IMPLEMENTED unless separately stated
 ```
 
-No statement in this record is evidence that BioHarness runtime already enforces these contracts.
+Passing Core tests are evidence only for the implemented P0 subset. They do not validate the Genome-web reference workflow, advanced memory/pathway behavior, Finding/Decision/Canonical publication, or other design-only portions of this contract.

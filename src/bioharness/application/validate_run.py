@@ -34,6 +34,15 @@ class ValidationService:
         limitations: tuple[str, ...] = (),
         evidence_refs: tuple[str, ...] = (),
     ) -> ValidationReport:
+        if (
+            outcome in {
+                ValidationOutcome.PASS,
+                ValidationOutcome.PASS_WITH_LIMITATIONS,
+            }
+            and not evidence_refs
+        ):
+            raise ValueError("positive validation outcomes require evidence")
+
         report = ValidationReport(
             id=uuid4(),
             kind=kind,
@@ -78,8 +87,30 @@ class ValidationService:
         all_requirements_met = True
         accepted_reports = []
         for requirement in profile.requirements:
-            matching = [report for report in reports if report.kind == requirement.kind]
-            accepted = [report for report in matching if report.outcome in requirement.allowed_outcomes]
+            matching = [
+                report for report in reports if report.kind == requirement.kind
+            ]
+            if len(matching) > 1:
+                raise ValueError(
+                    f"validation requirement {requirement.kind!r} requires exactly one report"
+                )
+            if (
+                matching
+                and matching[0].outcome
+                in {
+                    ValidationOutcome.PASS,
+                    ValidationOutcome.PASS_WITH_LIMITATIONS,
+                }
+                and not matching[0].evidence_refs
+            ):
+                raise ValueError(
+                    f"validation requirement {requirement.kind!r} positive outcome requires evidence"
+                )
+            accepted = [
+                report
+                for report in matching
+                if report.outcome in requirement.allowed_outcomes
+            ]
             if not accepted:
                 all_requirements_met = False
             else:

@@ -15,7 +15,14 @@ class TaskNotFound(LookupError):
 
 
 class ResolutionService:
-    def __init__(self, *, policy, provider, uow_factory, clock: Callable[[], datetime] | None = None):
+    def __init__(
+        self,
+        *,
+        policy,
+        provider,
+        uow_factory,
+        clock: Callable[[], datetime] | None = None,
+    ):
         self.policy = policy
         self.provider = provider
         self.uow_factory = uow_factory
@@ -27,15 +34,29 @@ class ResolutionService:
             if task is None:
                 raise TaskNotFound(str(task_id))
 
-        decision = self.policy.evaluate(actor, "read_resolve", f"task:{task_id}", {"task_revision": task.revision})
-        if decision.outcome in {PolicyOutcome.DENY, PolicyOutcome.REQUIRE_APPROVAL}:
-            with self.uow_factory() as uow:
-                uow.planning.add_policy_decision(decision)
-                uow.commit()
-            raise ResolutionDenied(f"resolution not authorized: {decision.outcome.value}")
+        decision = self.policy.evaluate(
+            actor,
+            "read_resolve",
+            f"task:{task_id}",
+            {"task_revision": task.revision},
+        )
+        with self.uow_factory() as uow:
+            uow.planning.add_policy_decision(decision)
+            uow.commit()
+
+        if decision.outcome in {
+            PolicyOutcome.DENY,
+            PolicyOutcome.REQUIRE_APPROVAL,
+        }:
+            raise ResolutionDenied(
+                f"resolution not authorized: {decision.outcome.value}"
+            )
 
         logical_resources = tuple(task.biological_scope.get("resources", ()))
-        resolution = self.provider.resolve(logical_resources, {"task_id": str(task.id), "task_revision": task.revision})
+        resolution = self.provider.resolve(
+            logical_resources,
+            {"task_id": str(task.id), "task_revision": task.revision},
+        )
         now = self.clock()
         refs = tuple(
             ResolvedDataRef(
@@ -46,15 +67,19 @@ class ResolutionService:
                 logical_uri=resource.logical_uri,
                 content_sha256=resource.content_identity.get("content_sha256"),
                 manifest_sha256=resource.content_identity.get("manifest_sha256"),
-                member_manifest_sha256=resource.content_identity.get("member_manifest_sha256"),
+                member_manifest_sha256=resource.content_identity.get(
+                    "member_manifest_sha256"
+                ),
                 biological_identity=resource.biological_identity,
-                metadata={**resource.metadata, "provider_evidence": list(resolution.evidence)},
+                metadata={
+                    **resource.metadata,
+                    "provider_evidence": list(resolution.evidence),
+                },
                 resolved_at=now,
             )
             for resource in resolution.resources
         )
         with self.uow_factory() as uow:
-            uow.planning.add_policy_decision(decision)
             for ref in refs:
                 uow.planning.add_data_ref(ref)
             uow.commit()

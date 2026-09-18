@@ -23,21 +23,26 @@ def _allocate(uow, spec, *, preflight_evidence):
     )
 
 
-def test_concurrent_attempt_allocation_is_serialized(migrated_database):
+def test_concurrent_attempt_allocation_allows_only_one_active_intent(migrated_database):
     spec = make_run_spec()
     with PostgresUnitOfWork(migrated_database) as uow:
         uow.planning.add_run_spec(spec)
         uow.commit()
 
     def allocate(_):
-        with PostgresUnitOfWork(migrated_database) as uow:
-            attempt = _allocate(uow, spec, preflight_evidence={"checked": True})
-            uow.commit()
-            return attempt.attempt_number
+        try:
+            with PostgresUnitOfWork(migrated_database) as uow:
+                attempt = _allocate(uow, spec, preflight_evidence={"checked": True})
+                uow.commit()
+                return ("allocated", attempt.attempt_number)
+        except RuntimeError:
+            return ("blocked", None)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        numbers = set(pool.map(allocate, range(2)))
-    assert numbers == {1, 2}
+        results = list(pool.map(allocate, range(2)))
+
+    assert sorted(result[0] for result in results) == ["allocated", "blocked"]
+    assert [result[1] for result in results if result[0] == "allocated"] == [1]
 
 
 def test_submission_intent_persists_preflight_evidence(migrated_database):
@@ -62,7 +67,83 @@ def test_submission_intent_persists_preflight_evidence(migrated_database):
     assert intent.payload["preflight_evidence"] == evidence
 
 
-def test_unresolved_attempt_blocks_new_allocation_inside_transaction(migrated_database):
+@pytest.mark.parametrize(
+    "blocking_state",
+    [
+        RunAttemptState.SUBMITTING,
+        RunAttemptState.RUNNING,
+        RunAttemptState.COLLECTING,
+        RunAttemptState.UNKNOWN,
+        RunAttemptState.NEEDS_OPERATOR_RECONCILIATION,
+    ],
+)
+def test_nonterminal_or_unresolved_attempt_blocks_new_allocation(
+    migrated_database, blocking_state
+):
+    spec = make_run_spec()
+    with PostgresUnitOfWork(migrated_database) as uow:
+        uow.planning.add_run_spec(spec)
+        uow.commit()
+
+    with PostgresUnitOfWork(migrated_database) as uow:
+        first = _allocate(uow, spec, preflight_evidence={"checked": True})
+        uow.commit()
+
+    if blocking_state is not RunAttemptState.SUBMITTING:
+        with PostgresUnitOfWork(migrated_database) as uow:
+            if blocking_state in {
+                RunAttemptState.RUNNING,
+                RunAttemptState.COLLECTING,
+                RunAttemptState.NEEDS_OPERATOR_RECONCILIATION,
+            }:
+                current = uow.runs.transition(
+                    first.id,
+                    RunAttemptState.RUNNING,
+                    RunEventType.EXECUTION_STARTED,
+                    {"test": True},
+                    NOW,
+                )
+                if blocking_state is RunAttemptState.COLLECTING:
+                    uow.runs.transition(
+                        current.id,
+                        RunAttemptState.COLLECTING,
+                        RunEventType.RECONCILIATION_RESOLVED,
+                        {"test": True},
+                        NOW,
+                    )
+                elif blocking_state is RunAttemptState.NEEDS_OPERATOR_RECONCILIATION:
+                    unknown = uow.runs.transition(
+                        current.id,
+                        RunAttemptState.UNKNOWN,
+                        RunEventType.EXECUTION_OUTCOME_UNKNOWN,
+                        {"test": True},
+                        NOW,
+                    )
+                    uow.runs.transition(
+                        unknown.id,
+                        RunAttemptState.NEEDS_OPERATOR_RECONCILIATION,
+                        RunEventType.RECONCILIATION_REQUIRED,
+                        {"test": True},
+                        NOW,
+                    )
+            elif blocking_state is RunAttemptState.UNKNOWN:
+                uow.runs.transition(
+                    first.id,
+                    RunAttemptState.UNKNOWN,
+                    RunEventType.EXECUTION_OUTCOME_UNKNOWN,
+                    {"test": True},
+                    NOW,
+                )
+            uow.commit()
+
+    with pytest.raises(RuntimeError, match="prior attempt"):
+        with PostgresUnitOfWork(migrated_database) as uow:
+            _allocate(uow, spec, preflight_evidence={"checked": True})
+            uow.commit()
+
+
+@pytest.mark.parametrize("terminal_state", [RunAttemptState.FINISHED, RunAttemptState.FAILED])
+def test_terminal_attempt_allows_later_allocation(migrated_database, terminal_state):
     spec = make_run_spec()
     with PostgresUnitOfWork(migrated_database) as uow:
         uow.planning.add_run_spec(spec)
@@ -73,16 +154,40 @@ def test_unresolved_attempt_blocks_new_allocation_inside_transaction(migrated_da
         uow.commit()
 
     with PostgresUnitOfWork(migrated_database) as uow:
-        uow.runs.transition(
-            first.id,
-            RunAttemptState.UNKNOWN,
-            RunEventType.EXECUTION_OUTCOME_UNKNOWN,
-            {"reason": "ambiguous"},
-            NOW,
-        )
+        if terminal_state is RunAttemptState.FAILED:
+            uow.runs.transition(
+                first.id,
+                RunAttemptState.FAILED,
+                RunEventType.EXECUTION_EXITED,
+                {"test": True},
+                NOW,
+            )
+        else:
+            running = uow.runs.transition(
+                first.id,
+                RunAttemptState.RUNNING,
+                RunEventType.EXECUTION_STARTED,
+                {"test": True},
+                NOW,
+            )
+            collecting = uow.runs.transition(
+                running.id,
+                RunAttemptState.COLLECTING,
+                RunEventType.RECONCILIATION_RESOLVED,
+                {"test": True},
+                NOW,
+            )
+            uow.runs.transition(
+                collecting.id,
+                RunAttemptState.FINISHED,
+                RunEventType.COLLECTION_FINISHED,
+                {"test": True},
+                NOW,
+            )
         uow.commit()
 
-    with pytest.raises(RuntimeError, match="unresolved"):
-        with PostgresUnitOfWork(migrated_database) as uow:
-            _allocate(uow, spec, preflight_evidence={"checked": True})
-            uow.commit()
+    with PostgresUnitOfWork(migrated_database) as uow:
+        second = _allocate(uow, spec, preflight_evidence={"checked": True})
+        uow.commit()
+
+    assert second.attempt_number == 2

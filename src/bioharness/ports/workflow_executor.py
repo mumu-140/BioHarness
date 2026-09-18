@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Any, Protocol
+from uuid import UUID
 
 from pydantic import Field
 
@@ -15,6 +16,25 @@ class ExecutorCapabilities(FrozenRecord):
     cancellation: str
     logs: bool
     trace: bool
+
+
+class ExecutionDescriptor(FrozenRecord):
+    run_spec_id: UUID
+    run_spec_hash: str
+    analysis_hash: str
+    attempt_id: UUID
+    attempt_number: int
+    submission_key: str
+    provider_attempt_name: str
+    workflow_identity: dict[str, Any]
+    resolved_inputs: tuple[dict[str, Any], ...]
+    result_affecting_parameters: dict[str, Any]
+    environment_contract: dict[str, Any]
+    reproducibility_contract: dict[str, Any]
+    planned_resource_controls: dict[str, Any]
+    expected_outputs: tuple[str, ...]
+    validation_profile_id: str
+    validation_profile_revision: str
 
 
 class InvocationSpec(FrozenRecord):
@@ -43,12 +63,10 @@ class ExecutionEvidence(FrozenRecord):
 class WorkflowExecutor(Protocol):
     def capabilities(self) -> ExecutorCapabilities: ...
 
-    def prepare(
-        self, run_spec_payload: dict[str, Any], attempt_payload: dict[str, Any]
-    ) -> InvocationSpec: ...
+    def prepare(self, execution: ExecutionDescriptor) -> InvocationSpec: ...
 
     def inspect(
-        self, binding: ExecutionBinding, attempt_payload: dict[str, Any]
+        self, binding: ExecutionBinding | None, attempt_payload: dict[str, Any]
     ) -> ExecutionEvidence: ...
 
     def discover_artifacts(

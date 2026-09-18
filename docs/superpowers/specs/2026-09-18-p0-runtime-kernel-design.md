@@ -1,11 +1,11 @@
 # BioHarness P0 Runtime Kernel Design
 
 Date: 2026-09-18
-Status: APPROVED FOR IMPLEMENTATION PLANNING
-Runtime status: NOT_IMPLEMENTED
-Acceptance status: NOT_RUN
-Branch: `design/p0-runtime-kernel`
-Base: `main@56f3dd1362ed5c772a8062df6456bc21a53a7b80`
+Status: IMPLEMENTED + TESTED FOR PROVIDER-AGNOSTIC CORE
+Runtime status: CORE_IMPLEMENTED
+Acceptance status: CORE_TESTED; GENOME_WEB_REFERENCE_NOT_RUN
+Original design branch: `design/p0-runtime-kernel`
+Original design base: `main@56f3dd1362ed5c772a8062df6456bc21a53a7b80`
 
 ## 1. Purpose
 
@@ -862,7 +862,7 @@ The P0 kernel is implemented only when executable evidence demonstrates all of t
 
 The Genome-web TF reference case additionally demonstrates that an external existing scientific workflow can satisfy these contracts without being absorbed into BioHarness. Its acceptance record includes provider revision, implementation revision, data identity, assertions, observed results, timestamps, and supporting evidence.
 
-Until those executable records exist, repository documentation must continue to report P0 runtime as `NOT_IMPLEMENTED`/acceptance as `NOT_RUN`.
+Executable Core records now exist and cover the provider-agnostic kernel. This does not satisfy the Genome-web reference acceptance boundary: provider-specific adapter status remains `NOT_IMPLEMENTED` and live Genome-web scenarios remain `NOT_RUN` until fresh reference evidence is recorded.
 
 ## 28. Implementation Order Implied by This Design
 
@@ -888,4 +888,12 @@ This section fixes dependency order without serving as the detailed implementati
 
 The reference case is deliberately last in the dependency direction: it depends on BioHarness contracts, while BioHarness Core does not depend on the reference case.
 
-The detailed task/file/test sequence is created only after this written spec is reviewed and approved.
+Current execution status:
+
+```text
+steps 1-13: IMPLEMENTED + TESTED in provider-agnostic Core
+step 14: Genome-web TF reference adapters = NOT_IMPLEMENTED
+step 15: isolated live Genome-web TF acceptance = NOT_RUN
+```
+
+The reference-integration implementation plan must consume the actual Core ports, including durable authorization-before-resolution, the explicit `ExecutionDescriptor`, binding-optional reconciliation inspection, and conflict-safe typed validation.

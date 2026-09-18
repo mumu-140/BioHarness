@@ -40,9 +40,8 @@ def sha256_file(path: Path) -> str:
 
 
 class FakeScienceExecutor:
-    def __init__(self, *, run_root: Path, input_path: Path):
+    def __init__(self, *, run_root: Path):
         self.run_root=run_root
-        self.input_path=input_path
 
     def capabilities(self):
         return ExecutorCapabilities(
@@ -55,10 +54,11 @@ class FakeScienceExecutor:
     def _outdir(self, attempt_payload):
         return self.run_root / attempt_payload["provider_attempt_name"]
 
-    def prepare(self, run_spec_payload, attempt_payload):
-        outdir=self._outdir(attempt_payload)
+    def prepare(self, execution):
+        outdir=self.run_root / execution.provider_attempt_name
+        input_path=Path(execution.resolved_inputs[0]["metadata"]["path"])
         return InvocationSpec(
-            argv=(sys.executable, str(FAKE_PROVIDER), "--input", str(self.input_path), "--outdir", str(outdir), "--mode", "success"),
+            argv=(sys.executable, str(FAKE_PROVIDER), "--input", str(input_path), "--outdir", str(outdir), "--mode", "success"),
             cwd=self.run_root,
             env=dict(os.environ),
             stdout_path=outdir / "stdout.log",
@@ -179,7 +179,7 @@ def test_provider_agnostic_p0_success_flow(migrated_database, tmp_path):
     _, refs, spec, input_path=planned_run(migrated_database, tmp_path)
     run_root=tmp_path / "runs"; run_root.mkdir()
     artifact_root=tmp_path / "artifacts"; artifact_root.mkdir()
-    executor=FakeScienceExecutor(run_root=run_root, input_path=input_path)
+    executor=FakeScienceExecutor(run_root=run_root)
     execution=ExecutionService(
         policy=FakePolicyEvaluator(), executor=executor, process_runner=LocalProcessRunner(),
         uow_factory=lambda: PostgresUnitOfWork(migrated_database),

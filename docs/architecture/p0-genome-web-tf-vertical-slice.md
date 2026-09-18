@@ -2,7 +2,8 @@
 
 Date: 2026-09-18
 Status: Authoritative P0 design record
-Runtime status: NOT_IMPLEMENTED
+Core dependency status: P0 Core IMPLEMENTED + TESTED
+Reference adapter status: NOT_IMPLEMENTED
 Scenario status: NOT_RUN
 
 ## 1. Purpose
@@ -26,6 +27,12 @@ Files inspected:
 - `pipeline/nextflow/main.nf`
 - `pipeline/nextflow/nextflow.config`
 - `pipeline/nextflow/README.md`
+- `pipeline/nextflow/scripts/assemble_tf_bundle.py`
+- `pipeline/scripts/build_tf_trees.py`
+- `pipeline/scripts/build_tf_tree_summary.py`
+- `pipeline/scripts/verify_tf_tree_summary.py`
+- `pipeline/nextflow/tests/integration.py`
+- `pipeline/nextflow/tests/run.sh`
 
 P0 capability claims below are tied to this inspected revision. A later provider revision must be reassessed rather than inheriting these claims automatically.
 
@@ -83,7 +90,7 @@ Provider rules BioHarness preserves include explicit species/UID/build/release i
 
 ## 4. ScientificTaskSpec Uses Requested/Logical Scope
 
-TaskSpec captures requested biological scope **before** provider resolution. It must not pretend a resource is already resolved.
+TaskSpec captures requested biological scope **before** provider resolution. It must not pretend a resource is already resolved. Core uses `biological_scope["resources"]` as the provider-agnostic logical-resource slot passed to `DataProvider.resolve`; Genome-web-specific identity remains inside those logical identifiers and provider output.
 
 ```yaml
 scientific_task_spec:
@@ -91,7 +98,7 @@ scientific_task_spec:
   requested_inference: family-level protein phylogeny
   analysis_class: tf_phylogeny
   biological_scope:
-    requested_genome_refs: [logical Genome-web resource identifiers]
+    resources: [logical Genome-web resource identifiers]
     required_release_constraints: [...]
   output_intent: candidate
   unresolved_fields: []
@@ -325,7 +332,7 @@ Memory can influence later context/assessment/configuration proposals. It does n
 
 ## 15. P0 Acceptance Criteria
 
-Fresh executable evidence is required before P0 can be described as implemented/validated. P0 must demonstrate:
+Fresh executable evidence is required before the **Genome-web reference slice** can be described as implemented/validated. The provider-agnostic Core is already implemented/tested, but the reference slice must still demonstrate:
 
 1. requested logical biological scope resolves to exact/checkable consumed input identities;
 2. authorization occurs before protected resolution/access and before workflow launch;
@@ -349,8 +356,9 @@ P0 does not establish correctness of RNA-seq/GO runtime contracts, automatic Mem
 
 ```text
 architecture = DESIGNED
+provider_agnostic_core = IMPLEMENTED + TESTED
 provider_adapter = NOT_IMPLEMENTED
-runtime_tests = NOT_RUN
+reference_runtime_tests = NOT_RUN
 scientific_validation = NOT_RUN
 production_publication = OUT_OF_SCOPE_P0
 ```
