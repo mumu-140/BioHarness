@@ -226,16 +226,36 @@ def test_pid_start_token_mismatch_is_indeterminate():
     assert LocalProcessProbe().probe(binding) is None
 
 
-def test_new_start_blocked_while_prior_attempt_unresolved():
-    spec, attempt = make_attempt()
+@pytest.mark.parametrize(
+    "blocking_state",
+    [
+        RunAttemptState.SUBMITTING,
+        RunAttemptState.RUNNING,
+        RunAttemptState.COLLECTING,
+        RunAttemptState.UNKNOWN,
+        RunAttemptState.NEEDS_OPERATOR_RECONCILIATION,
+    ],
+)
+def test_new_start_blocked_while_prior_attempt_active_or_unresolved(blocking_state):
+    spec, attempt = make_attempt(state=blocking_state)
     runs = Runs(attempt)
+    runner = FakeProcessRunner()
+    preflight_calls = []
+
+    def preflight(_):
+        preflight_calls.append(True)
+        return {}
+
     service = ExecutionService(
         policy=FakePolicyEvaluator(),
         executor=FakeWorkflowExecutor(),
-        process_runner=FakeProcessRunner(),
+        process_runner=runner,
         uow_factory=lambda: Uow(Planning(spec), runs),
-        preflight=lambda _: {},
+        preflight=preflight,
         clock=lambda: NOW,
     )
     with pytest.raises(PriorAttemptUnresolved):
         service.start(spec.id, actor="alice")
+
+    assert preflight_calls == []
+    assert runner.spawn_calls == 0
