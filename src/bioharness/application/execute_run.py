@@ -30,7 +30,7 @@ class ExecutionService:
         executor,
         process_runner,
         uow_factory,
-        preflight: Callable[[object], None] | None = None,
+        preflight: Callable[[object], dict],
         clock: Callable[[], datetime] | None = None,
         executor_namespace: str = "local",
     ):
@@ -38,7 +38,7 @@ class ExecutionService:
         self.executor = executor
         self.process_runner = process_runner
         self.uow_factory = uow_factory
-        self.preflight = preflight or (lambda run_spec: None)
+        self.preflight = preflight
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.executor_namespace = executor_namespace
 

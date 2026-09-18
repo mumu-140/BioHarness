@@ -85,7 +85,7 @@ def test_new_start_blocked_while_prior_attempt_unresolved():
     runs=Runs(attempt)
     service=ExecutionService(
         policy=FakePolicyEvaluator(), executor=FakeWorkflowExecutor(), process_runner=FakeProcessRunner(),
-        uow_factory=lambda: Uow(Planning(spec),runs), clock=lambda: NOW,
+        uow_factory=lambda: Uow(Planning(spec),runs), preflight=lambda _: {}, clock=lambda: NOW,
     )
     with pytest.raises(PriorAttemptUnresolved):
         service.start(spec.id,actor="alice")

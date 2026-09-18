@@ -48,7 +48,7 @@ def test_ambiguous_spawn_leaves_single_unknown_attempt():
     executor=FakeWorkflowExecutor(); runner=FakeProcessRunner(raise_after_possible_spawn=True)
     service=ExecutionService(
         policy=FakePolicyEvaluator(), executor=executor, process_runner=runner,
-        uow_factory=lambda: Uow(planning,runs), clock=lambda: NOW,
+        uow_factory=lambda: Uow(planning,runs), preflight=lambda _: {}, clock=lambda: NOW,
     )
     attempt=service.start(spec.id, actor="alice")
     assert attempt.state is RunAttemptState.UNKNOWN

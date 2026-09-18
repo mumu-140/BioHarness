@@ -41,6 +41,7 @@ def test_current_denial_blocks_launch_before_prepare_or_spawn():
         executor=executor,
         process_runner=runner,
         uow_factory=lambda: Uow(planning, runs),
+        preflight=lambda _: {},
         clock=lambda: NOW,
     )
     with pytest.raises(LaunchDenied):
@@ -48,3 +49,17 @@ def test_current_denial_blocks_launch_before_prepare_or_spawn():
     assert executor.prepare_calls == 0
     assert runner.spawn_calls == 0
     assert len(planning.decisions) == 1
+
+
+def test_execution_service_requires_explicit_preflight():
+    spec = make_run_spec()
+    planning = PlanningSpy(spec)
+    runs = RunsSpy()
+    with pytest.raises(TypeError):
+        ExecutionService(
+            policy=FakePolicyEvaluator(),
+            executor=FakeWorkflowExecutor(),
+            process_runner=FakeProcessRunner(),
+            uow_factory=lambda: Uow(planning, runs),
+            clock=lambda: NOW,
+        )
