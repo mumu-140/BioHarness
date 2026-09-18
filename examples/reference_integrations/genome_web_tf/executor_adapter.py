@@ -78,6 +78,7 @@ class GenomeWebTFExecutorAdapter:
         resolved_manifest = manifest_paths[0]
 
         argv = [
+            "bash",
             str(self.config.launcher),
             str(self.config.run_root),
             resolved_manifest,

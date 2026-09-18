@@ -200,7 +200,7 @@ class GenomeWebTFPreflight:
 
         try:
             launcher_check = self.command_runner(
-                (str(self.config.launcher), "--help"),
+                ("bash", str(self.config.launcher), "--help"),
                 check=False,
                 text=True,
                 capture_output=True,
