@@ -107,20 +107,23 @@ class RunRepository:
         ).scalar_one()
         if not spec_row.executable:
             raise ValueError("RunSpec is not executable")
-        unresolved_id = self.session.execute(
+        blocking_attempt_id = self.session.execute(
             select(RunAttemptRow.id)
             .where(
                 RunAttemptRow.run_spec_id == run_spec_id,
                 RunAttemptRow.state.in_([
+                    RunAttemptState.SUBMITTING.value,
+                    RunAttemptState.RUNNING.value,
+                    RunAttemptState.COLLECTING.value,
                     RunAttemptState.UNKNOWN.value,
                     RunAttemptState.NEEDS_OPERATOR_RECONCILIATION.value,
                 ]),
             )
             .limit(1)
         ).scalar_one_or_none()
-        if unresolved_id is not None:
+        if blocking_attempt_id is not None:
             raise RuntimeError(
-                f"unresolved prior attempt blocks allocation for RunSpec {run_spec_id}"
+                f"prior attempt blocks allocation for RunSpec {run_spec_id}"
             )
         max_number = self.session.execute(
             select(func.max(RunAttemptRow.attempt_number)).where(RunAttemptRow.run_spec_id == run_spec_id)
