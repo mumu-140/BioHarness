@@ -1,6 +1,7 @@
 # BioHarness Architecture Acceptance Scenario Catalog
 
 Date: 2026-09-18
+Updated: 2026-09-19
 Status: Authoritative acceptance-scenario design
 Execution status: PARTIAL — `TF-01`, `TF-02`, `EXEC-01`, `EXEC-06`, and `DATA-01` have fresh PASS evidence; all other scenarios remain `NOT_RUN`.
 

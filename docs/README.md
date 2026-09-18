@@ -1,9 +1,9 @@
 # BioHarness Documentation Map
 
-Date: 2026-09-18
+Date: 2026-09-19
 Status: Authoritative navigation record
 
-BioHarness now has a provider-agnostic P0 Core runtime kernel with executable Core tests. The Genome-web TF reference adapter and live reference acceptance remain pending, and advanced memory/pathway, Finding/Decision, canonical-publication, and remote-execution capabilities remain design targets unless a narrower document states otherwise.
+BioHarness now has a provider-agnostic P0 Core runtime kernel with executable Core tests and an implemented/tested Genome-web TF reference adapter. Fresh isolated live acceptance has passed the bounded reference scenarios `TF-01`, `TF-02`, `EXEC-01`, `EXEC-06`, and `DATA-01`; the remaining scenario catalog and advanced memory/pathway, Finding/Decision, canonical-publication, and remote-execution capabilities remain pending unless a narrower document states otherwise.
 
 ## 1. Normal Reading Path
 
@@ -16,7 +16,7 @@ Future contributors/agents should normally read:
 3. `docs/architecture/p0-genome-web-tf-vertical-slice.md`
    - authoritative first implementation slice, pinned to the audited Genome-web TF provider revision.
 4. `docs/architecture/scenario-validation-plan.md`
-   - authoritative acceptance-scenario catalog; scenarios remain `NOT_RUN` until concrete tests execute them.
+   - authoritative acceptance-scenario catalog; five Genome-web reference scenarios now have fresh PASS evidence while all unexecuted scenarios remain `NOT_RUN`.
 5. Memory records when memory/retrieval/consolidation behavior is relevant:
    - `docs/architecture/provider-composition-and-research-memory.md`
    - `docs/architecture/hierarchical-associative-memory.md`
@@ -40,6 +40,7 @@ Focused contracts control their explicit domain. Cross-cutting scientific/run sa
 
 - `docs/architecture/reference-architectures.md`
 - `docs/architecture/evidence-register-2026-09-17.md`
+- `docs/validation/records/2026-09-19-genome-web-tf-p0.md`
 
 Evidence informs design but never overrides contracts by itself.
 
@@ -132,10 +133,11 @@ Current state:
 architecture/contracts = DESIGNED
 P0 provider-agnostic Core kernel = IMPLEMENTED + TESTED
 P0.1H execution/validation hardening = IMPLEMENTED + TESTED
-Genome-web TF reference adapter = NOT_IMPLEMENTED
-Genome-web TF live acceptance scenarios = NOT_RUN
+Genome-web TF reference adapter = IMPLEMENTED + TESTED
+Genome-web TF targeted live acceptance = VALIDATED (TF-01, TF-02, EXEC-01, EXEC-06, DATA-01)
+remaining acceptance scenarios = NOT_RUN
 advanced memory/pathway + Finding/Decision/Canonical runtime = NOT_IMPLEMENTED
 production publication = OUT_OF_SCOPE_P0
 ```
 
-Core CI is evidence only for the provider-agnostic kernel and its tested invariants. It is not evidence that the Genome-web reference slice, advanced memory architecture, or production publication has been validated.
+Core CI is evidence only for the provider-agnostic kernel and its tested invariants. Genome-web reference claims require the separate pinned live evidence record above; that record validates only its five named scenarios and does not validate the remaining catalog, advanced memory architecture, or production publication.

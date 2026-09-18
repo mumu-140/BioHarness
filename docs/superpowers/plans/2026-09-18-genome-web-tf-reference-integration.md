@@ -1,6 +1,6 @@
 # Genome-web TF Reference Integration Implementation Plan
 
-Execution status: **IN_PROGRESS**. P0.1H is merged at `25313eff0df22db3f543768051f19c3aff994adc`. Tasks 1–4 are implemented and covered by reference/Core CI; Task 5 live acceptance remains `NOT_RUN` pending an authorized remote/test environment.
+Execution status: **COMPLETE**. P0.1H is merged at `25313eff0df22db3f543768051f19c3aff994adc`; Tasks 1–5 are complete. Fresh isolated acceptance at BioHarness revision `952c3c1b71dad8e0e47ef38cd79c471a142fd564` supports PASS for `TF-01`, `TF-02`, `EXEC-01`, `EXEC-06`, and `DATA-01`; all other catalog scenarios remain unchanged.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
@@ -415,7 +415,7 @@ git commit -m "feat: add Genome-web launch preflight and acceptance config"
 ### Task 5: Live Isolated Genome-web TF Acceptance Run
 
 **Files:**
-- Create after run: `docs/validation/records/<YYYY-MM-DD>-genome-web-tf-p0.md`
+- Created: `docs/validation/records/2026-09-19-genome-web-tf-p0.md`
 - Modify after run: `docs/architecture/scenario-validation-plan.md` only to update scenario status/link where supported by the new evidence record.
 - Runtime evidence remains outside git under the configured BioHarness run/artifact root.
 
@@ -423,7 +423,7 @@ git commit -m "feat: add Genome-web launch preflight and acceptance config"
 - Consumes: completed Core plan, completed reference adapters, designated remote/test environment.
 - Produces: fresh acceptance record for the reference slice.
 
-- [ ] **Step 1: Verify provider and implementation identity on the designated server**
+- [x] **Step 1: Verify provider and implementation identity on the designated server**
 
 Record:
 
@@ -436,7 +436,7 @@ input manifest SHA-256
 
 If the provider revision differs, stop; re-audit or pin the audited revision before using the capability snapshot.
 
-- [ ] **Step 2: Run dry-run isolation check remotely**
+- [x] **Step 2: Run dry-run isolation check remotely**
 
 ```bash
 python -m examples.reference_integrations.genome_web_tf.acceptance \
@@ -446,7 +446,7 @@ python -m examples.reference_integrations.genome_web_tf.acceptance \
 
 Expected: allowed protected read/resolve and candidate launch; denied production publication/canonical mutation; writable paths isolated.
 
-- [ ] **Step 3: Execute only through BioHarness governed flow**
+- [x] **Step 3: Execute only through BioHarness governed flow**
 
 ```text
 TaskSpec
@@ -466,11 +466,11 @@ TaskSpec
 
 Do not manually call the Genome-web launcher outside the RunAttempt when producing acceptance evidence.
 
-- [ ] **Step 4: Run negative fixture separately for cross-UID conflict**
+- [x] **Step 4: Run negative fixture separately for cross-UID conflict**
 
 Use a deliberately conflicting reference fixture and verify the external provider rejects it before scientific execution. Record the provider stderr/exit evidence; do not modify IDs to force progress.
 
-- [ ] **Step 5: Write one evidence record with catalog-required fields**
+- [x] **Step 5: Write one evidence record with catalog-required fields**
 
 For each observed scenario include:
 
@@ -491,7 +491,7 @@ supporting logs/artifacts/events
 
 Target reference scenarios: TF-01, TF-02, EXEC-01, EXEC-06, DATA-01. Only mark those actually executed.
 
-- [ ] **Step 6: Re-run Core CI without Genome-web checkout**
+- [x] **Step 6: Re-run Core CI without Genome-web checkout**
 
 Run:
 
@@ -501,7 +501,7 @@ python -m pytest tests/unit tests/contract tests/integration -q
 
 Expected: PASS. This demonstrates reference integration did not become a Core dependency.
 
-- [ ] **Step 7: Commit only evidence metadata/docs supported by the run**
+- [x] **Step 7: Commit only evidence metadata/docs supported by the run**
 
 ```bash
 git add docs/validation/records docs/architecture/scenario-validation-plan.md
