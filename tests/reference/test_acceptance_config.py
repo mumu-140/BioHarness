@@ -123,7 +123,7 @@ def test_dry_run_builds_preview_without_resolver_or_launcher_side_effect(tmp_pat
         "genomeweb:registered-genome:Alpha:90001",
         "genomeweb:registered-genome:Beta:00902",
     ]
-    assert report["planned_command"][0] == str(config.launcher)
+    assert report["planned_command"][:2] == ["bash", str(config.launcher)]
     assert report["policy_outcomes"] == {
         "read_resolve": "ALLOW",
         "launch": "ALLOW",
