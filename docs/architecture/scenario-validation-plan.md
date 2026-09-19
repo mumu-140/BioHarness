@@ -1,10 +1,11 @@
 # BioHarness Architecture Acceptance Scenario Catalog
 
 Date: 2026-09-18
+Updated: 2026-09-19
 Status: Authoritative acceptance-scenario design
-Execution status: NOT_RUN
+Execution status: PARTIAL — `TF-01`, `TF-02`, `EXEC-01`, `EXEC-06`, and `DATA-01` have fresh PASS evidence; all other scenarios remain `NOT_RUN`.
 
-This is the primary catalog of future architecture/runtime acceptance scenarios. It is **not** an executable test harness and does not claim that BioHarness currently implements or passes these scenarios.
+This is the primary catalog of architecture/runtime acceptance scenarios. It is **not** itself an executable test harness. Individual scenario status changes require a concrete implementation/test record with fresh evidence.
 
 Before a scenario may move from `NOT_RUN`, its implementation/test record must contain:
 
@@ -28,12 +29,14 @@ A future implementation plan converts these acceptance scenarios into concrete t
 ## 1. TF / P0 Identity and Intent
 
 ### TF-01 Preserve leading-zero UID
-Status: `NOT_RUN`
+Status: `PASS`
+Evidence: [`2026-09-19 Genome-web TF P0 reference acceptance`](../validation/records/2026-09-19-genome-web-tf-p0.md).
 Assert: `00902` remains exactly `00902` through ResolvedDataRef, resolved manifest, RunSpec, and provider invocation.
 Forbidden: coercion to `902` or silent aliasing.
 
 ### TF-02 Reject cross-UID identity conflict
-Status: `NOT_RUN`
+Status: `PASS`
+Evidence: [`2026-09-19 Genome-web TF P0 reference acceptance`](../validation/records/2026-09-19-genome-web-tf-p0.md).
 Assert: provider/scientific preflight blocks launch on an invalid cross-UID identity conflict.
 Forbidden: auto-renaming IDs or merging records merely to continue.
 
@@ -103,7 +106,8 @@ Forbidden: threshold relaxation merely to increase discoveries.
 ## 4. Provider Capability and Execution
 
 ### EXEC-01 Capability honesty
-Status: `NOT_RUN`
+Status: `PASS`
+Evidence: [`2026-09-19 Genome-web TF P0 reference acceptance`](../validation/records/2026-09-19-genome-web-tf-p0.md).
 For audited Genome-web revision `05072cbbcd533ca59afa13996d8d0edd8f939c6e`, assert: synchronous process, local backend, no native idempotency key, no durable async external ID/polling, no durable cancellation interface; limited reconciliation is explicitly constrained/evidenced.
 
 ### EXEC-02 Attempt-scoped submission identity
@@ -126,7 +130,8 @@ Assert: `UNKNOWN -> NEEDS_OPERATOR_RECONCILIATION`.
 Forbidden: automatic duplicate launch merely to make progress.
 
 ### EXEC-06 Explicit resume lineage
-Status: `NOT_RUN`
+Status: `PASS`
+Evidence: [`2026-09-19 Genome-web TF P0 reference acceptance`](../validation/records/2026-09-19-genome-web-tf-p0.md).
 Assert: automated resume is disabled until intended prior session identity can be bound reliably; implicit `last` is never treated as scientific identity.
 
 ### EXEC-07 Resume after tool failure
@@ -146,7 +151,8 @@ Assert: analysis identity changes or explicit impact/revalidation rule prevents 
 ## 5. Data Identity and Provenance
 
 ### DATA-01 Resolved manifest/member provenance
-Status: `NOT_RUN`
+Status: `PASS`
+Evidence: [`2026-09-19 Genome-web TF P0 reference acceptance`](../validation/records/2026-09-19-genome-web-tf-p0.md).
 Assert: exact resolved genome manifest/member identities consumed by Nextflow are registered/checkable independently of the original manifest path.
 
 ### DATA-02 Mutable collection URI cannot masquerade as same input
@@ -278,7 +284,8 @@ Assert: rolling docs/repositories record check date and revision/version when av
 ## 14. Current Summary
 
 ```text
-all runtime/scientific acceptance scenarios = NOT_RUN
+fresh PASS = TF-01, TF-02, EXEC-01, EXEC-06, DATA-01
+all remaining runtime/scientific acceptance scenarios = NOT_RUN
 ```
 
-No runtime correctness claim is made by this document.
+The five PASS entries are bounded to the pinned Genome-web reference implementation/provider revisions and evidence record linked above. No correctness claim is made for scenarios that remain `NOT_RUN`.

@@ -1,10 +1,12 @@
 # BioHarness P0 Genome-web TF Vertical Slice
 
 Date: 2026-09-18
+Updated: 2026-09-19
 Status: Authoritative P0 design record
 Core dependency status: P0 Core IMPLEMENTED + TESTED
-Reference adapter status: NOT_IMPLEMENTED
-Scenario status: NOT_RUN
+Reference adapter status: IMPLEMENTED + TESTED
+Scenario status: PARTIAL VALIDATION — `TF-01`, `TF-02`, `EXEC-01`, `EXEC-06`, and `DATA-01` PASS; all others remain `NOT_RUN`
+Evidence: [`2026-09-19 Genome-web TF P0 reference acceptance`](../validation/records/2026-09-19-genome-web-tf-p0.md)
 
 ## 1. Purpose
 
@@ -357,8 +359,8 @@ P0 does not establish correctness of RNA-seq/GO runtime contracts, automatic Mem
 ```text
 architecture = DESIGNED
 provider_agnostic_core = IMPLEMENTED + TESTED
-provider_adapter = NOT_IMPLEMENTED
-reference_runtime_tests = NOT_RUN
-scientific_validation = NOT_RUN
+provider_adapter = IMPLEMENTED + TESTED
+reference_runtime_tests = VALIDATED (targeted TF-01, TF-02, EXEC-01, EXEC-06, DATA-01 only)
+scientific_validation = NOT_RUN (no broad biological Finding/claim validated)
 production_publication = OUT_OF_SCOPE_P0
 ```

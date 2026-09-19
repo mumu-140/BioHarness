@@ -1,12 +1,13 @@
 # BioHarness P0 Workflow-Executor Source Audit — 2026-09-18
 
 Date: 2026-09-18
+Updated: 2026-09-19
 Status: Source audit / non-authoritative rationale
 Core status: provider-agnostic executor/reconciliation boundary IMPLEMENTED + TESTED
-Reference adapter status: NOT_IMPLEMENTED
-Live validation status: NOT_RUN
+Reference adapter status: IMPLEMENTED + TESTED
+Live validation status: TARGETED VALIDATION PASS — `TF-01`, `TF-02`, `EXEC-01`, `EXEC-06`, `DATA-01`
 
-> This file records source observations that motivated the P0 boundary. Final semantics live in `scientific-contracts-and-run-semantics.md` and `p0-genome-web-tf-vertical-slice.md`. This audit never participates in precedence resolution.
+> This file records source observations that motivated the P0 boundary. Final semantics live in `scientific-contracts-and-run-semantics.md` and `p0-genome-web-tf-vertical-slice.md`. This audit never participates in precedence resolution. Fresh runtime evidence is recorded separately in [`2026-09-19 Genome-web TF P0 reference acceptance`](../validation/records/2026-09-19-genome-web-tf-p0.md).
 
 ## Inspected Source
 
@@ -114,6 +115,6 @@ These claims apply to the pinned source revision only, not to Nextflow generally
 source_audit = COMPLETED
 observations_integrated_into_authoritative_docs = DESIGNED
 provider_agnostic_core_boundary = IMPLEMENTED + TESTED
-genome_web_adapter_implementation = NOT_IMPLEMENTED
-genome_web_runtime_validation = NOT_RUN
+genome_web_adapter_implementation = IMPLEMENTED + TESTED
+genome_web_runtime_validation = VALIDATED (targeted reference scenarios only)
 ```

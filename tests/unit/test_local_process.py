@@ -1,13 +1,16 @@
 import json
 import os
+import subprocess
 import sys
+import time
+from pathlib import Path
 
 import pytest
 
 import bioharness.adapters.local_process.runner as runner_module
-from bioharness.adapters.local_process.probe import LocalProcessProbe
+from bioharness.adapters.local_process.probe import LocalProcessProbe, linux_process_start_token
 from bioharness.adapters.local_process.runner import LocalProcessRunner
-from bioharness.ports.workflow_executor import InvocationSpec
+from bioharness.ports.workflow_executor import ExecutionBinding, InvocationSpec
 
 
 def test_local_process_binding_captures_identity(tmp_path):
@@ -64,3 +67,36 @@ def test_process_record_failure_after_spawn_is_ambiguous(tmp_path, monkeypatch):
 
     with pytest.raises(RuntimeError, match="recovery evidence"):
         LocalProcessRunner().spawn(invocation)
+
+
+
+def test_local_process_probe_treats_zombie_as_inactive():
+    if not Path("/proc/self/stat").exists():
+        pytest.skip("Linux /proc is required for zombie-state probing")
+
+    process = subprocess.Popen((sys.executable, "-c", "pass"))
+    token = linux_process_start_token(process.pid)
+    assert token is not None
+
+    stat_path = Path(f"/proc/{process.pid}/stat")
+    deadline = time.monotonic() + 5
+    state = None
+    while time.monotonic() < deadline:
+        raw = stat_path.read_text(encoding="utf-8")
+        close = raw.rfind(")")
+        state = raw[close + 2 :].split()[0]
+        if state == "Z":
+            break
+        time.sleep(0.01)
+
+    try:
+        assert state == "Z"
+        binding = ExecutionBinding(
+            host="local",
+            pid=process.pid,
+            process_start_token=token,
+            external_execution_id=None,
+        )
+        assert LocalProcessProbe().probe(binding) is False
+    finally:
+        process.wait()

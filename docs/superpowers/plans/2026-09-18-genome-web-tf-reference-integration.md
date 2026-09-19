@@ -1,8 +1,8 @@
 # Genome-web TF Reference Integration Implementation Plan
 
-Execution status: **NOT_STARTED**. This plan begins only after P0.1H merges and is rechecked against the merge SHA.
+Execution status: **COMPLETE**. P0.1H is merged at `25313eff0df22db3f543768051f19c3aff994adc`; Tasks 1–5 are complete. Fresh isolated acceptance was re-run against the current reference-integration head `5e9b52c99c8c9e09494d5aed1394a5368d4a09a5` and supports PASS for `TF-01`, `TF-02`, `EXEC-01`, `EXEC-06`, and `DATA-01`; all other catalog scenarios remain unchanged.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Prove that the provider-agnostic BioHarness P0 kernel can govern the existing Genome-web TF workflow as an external reference case without absorbing Genome-web scripts, schemas, or workflow logic into BioHarness Core.
 
@@ -41,7 +41,7 @@ Execution status: **NOT_STARTED**. This plan begins only after P0.1H merges and 
 **Interfaces:**
 - Produces: importable example module, `GenomeWebTFReferenceConfig`, and explicit audited-revision guard.
 
-- [ ] **Step 1: Write boundary/revision tests**
+- [x] **Step 1: Write boundary/revision tests**
 
 ```python
 import pytest
@@ -79,7 +79,7 @@ def test_observed_checkout_revision_mismatch_is_rejected(tmp_path):
         config(tmp_path).require_audited_revision(observed_revision="different")
 ```
 
-- [ ] **Step 2: Implement revision/path config**
+- [x] **Step 2: Implement revision/path config**
 
 ```python
 # examples/reference_integrations/genome_web_tf/config.py
@@ -136,7 +136,7 @@ def observe_repo_revision(repo_root: Path, run_command=subprocess.run) -> str:
 
 Tests inject the revision command runner. If Git metadata is unavailable or the observed checkout is not the audited commit, the reference adapter stops rather than trusting a configured revision string. Every operation that executes audited Genome-web code calls this guard before using the source.
 
-- [ ] **Step 3: Document dependency direction**
+- [x] **Step 3: Document dependency direction**
 
 README states:
 
@@ -148,7 +148,7 @@ BioHarness Core never depends on this directory.
 Deleting this directory must not break the bioharness package or Core tests.
 ```
 
-- [ ] **Step 4: Run and commit**
+- [x] **Step 4: Run and commit**
 
 Run: `python -m pytest tests/reference/test_genome_web_boundary.py -q`
 
@@ -173,7 +173,7 @@ git commit -m "test: define Genome-web reference integration boundary"
 - Provider-specific `input_manifest`, `planning_root`, and optional `existing_identities` are owned by `GenomeWebTFReferenceConfig`.
 - Produces: Core `ProviderResolution` with one `ProviderResource` per requested genome and exact resolved/member identity evidence.
 
-- [ ] **Step 1: Define typed provider error and stable logical identity**
+- [x] **Step 1: Define typed provider error and stable logical identity**
 
 Before invoking the external resolver, observe the actual Genome-web checkout revision and require both the configured and observed revisions to equal `AUDITED_REVISION`.
 
@@ -185,7 +185,7 @@ genomeweb:registered-genome:<species_id>:<five-digit-uid>
 
 The scheme belongs to the reference adapter, not BioHarness Core. The requested `logical_resources` set must exactly match the genomes present in the configured acceptance manifest for P0; unexpected extra or missing rows fail rather than being silently included/repaired.
 
-- [ ] **Step 2: Test exact external resolver command construction**
+- [x] **Step 2: Test exact external resolver command construction**
 
 For task `<task_id>`, create a task-scoped planning directory under `config.planning_root` and invoke:
 
@@ -198,7 +198,7 @@ For task `<task_id>`, create a task-scoped planning directory under `config.plan
 
 Append `--existing-identities <config.existing_identities>` only when configured. Tests inject a fake command runner; the adapter never reproduces provider UID/table validation logic.
 
-- [ ] **Step 3: Freeze exact consumed member identity**
+- [x] **Step 3: Freeze exact consumed member identity**
 
 Parse only the audited resolver columns:
 
@@ -227,7 +227,7 @@ Map each row to Core `ProviderResource`:
 
 Do not treat a path string alone as immutable data identity.
 
-- [ ] **Step 4: Test leading-zero identity, exact scope, and failure propagation**
+- [x] **Step 4: Test leading-zero identity, exact scope, and failure propagation**
 
 Tests must prove:
 - `uid=00902` remains exactly `"00902"`;
@@ -236,7 +236,7 @@ Tests must prove:
 - provider exit code 7 with stderr `cross-uid ID collision` becomes `ProviderResolutionError(7, ...)`;
 - the adapter does not repair/rename/retry provider failures.
 
-- [ ] **Step 5: Run and commit**
+- [x] **Step 5: Run and commit**
 
 Run: `python -m pytest tests/reference/test_genome_web_data_adapter.py -q`
 
@@ -261,7 +261,7 @@ git commit -m "feat: add external Genome-web data reference adapter"
 - `inspect(binding | None, attempt_payload)` supports binding-optional reconciliation using attempt-scoped provider evidence.
 - Produces: `ExecutorCapabilities`, `InvocationSpec`, `ExecutionEvidence`, and artifact candidate dictionaries.
 
-- [ ] **Step 1: Test audited capability snapshot**
+- [x] **Step 1: Test audited capability snapshot**
 
 Observe the actual checkout revision first; `capabilities()` must refuse to return the audited snapshot when either configured or observed revision differs.
 
@@ -280,7 +280,7 @@ trace = true
 
 A different provider revision must fail the audited-revision guard instead of inheriting the snapshot.
 
-- [ ] **Step 2: Test invocation composition from ExecutionDescriptor**
+- [x] **Step 2: Test invocation composition from ExecutionDescriptor**
 
 The adapter obtains:
 - isolated provider `run_root` and separate BioHarness `control_root` from reference config;
@@ -294,15 +294,18 @@ The returned `InvocationSpec` writes wrapper stdout/stderr under `config.control
 `prepare()` returns an `InvocationSpec` whose argv begins:
 
 ```text
+bash
 <external_repo>/pipeline/nextflow/run.sh
 <config.run_root>
 <resolved_manifest_path>
 <execution.provider_attempt_name>
 ```
 
+The explicit `bash` prefix is part of the reference contract so the adapter does not depend on the checkout preserving the launcher's executable bit.
+
 and appends only audited launcher flags such as `--min-seqs`, `--model`, `--bootstrap`, `--alrt`, `--seed`, `--mafft-threads`, and `--iqtree-threads`. Pass `--existing-identities` only when configured. P0 does not use implicit `--resume last`. The adapter MUST NOT construct `nextflow run` itself.
 
-- [ ] **Step 3: Implement binding-optional evidence mapping**
+- [x] **Step 3: Implement binding-optional evidence mapping**
 
 Derive two evidence locations:
 - BioHarness control evidence: `config.control_root / attempt_payload["provider_attempt_name"]` for `process.json` and wrapper stdout/stderr;
@@ -316,11 +319,11 @@ Rules:
 - without enough evidence to establish a terminal result, return inconclusive evidence and let Core stop at `NEEDS_OPERATOR_RECONCILIATION`;
 - do not fabricate a durable external execution ID, poll API, cancellation, or exactly-once guarantee.
 
-- [ ] **Step 4: Implement artifact discovery mapping**
+- [x] **Step 4: Implement artifact discovery mapping**
 
 Return artifact candidates only for provider outputs that actually exist. Roles may include `resolved_manifest`, `provider_invocation`, `execution_log`, `execution_trace`, `candidate_manifest`, `alignment`, `tree`, and audit tables. Core performs hashing/registration.
 
-- [ ] **Step 5: Run and commit**
+- [x] **Step 5: Run and commit**
 
 Run: `python -m pytest tests/reference/test_genome_web_executor_adapter.py -q`
 
@@ -347,7 +350,7 @@ git commit -m "feat: add Genome-web TF workflow reference adapter"
 - Acceptance configuration supplies provider-specific source/planning/run/artifact paths; Core contracts remain provider-agnostic.
 - `--dry-run` performs no resolver, launcher, or workflow side effect.
 
-- [ ] **Step 1: Add example config**
+- [x] **Step 1: Add example config**
 
 ```toml
 provider_repo = "/srv/genome-web-backend"
@@ -360,15 +363,19 @@ artifact_root = "/srv/bioharness-p0/artifacts"
 database_url_env = "BIOHARNESS_DATABASE_URL"
 production_roots = ["/srv/genome-web-production"]
 read_only_source_roots = ["/srv/genome-web-data"]
+nextflow_executable = "/srv/bioharness-p0/runtime/bin/nextflow"
+provider_python = "/srv/bioharness-p0/runtime/bin/python"
+mafft_executable = "/srv/bioharness-p0/runtime/bin/mafft"
+iqtree_executable = "/srv/bioharness-p0/runtime/bin/iqtree3"
 ```
 
-Optional `existing_identities` is configured only when the acceptance fixture has the audited snapshot. No credential is committed.
+The four runtime executable paths are explicit reference configuration, are injected into the audited launcher through its existing `GW_*` overrides, and are checked against the frozen `environment_contract` immediately before launch. Optional `existing_identities` is configured only when the acceptance fixture has the audited snapshot. No credential is committed.
 
-- [ ] **Step 2: Validate path isolation**
+- [x] **Step 2: Validate path isolation**
 
 Reject writable planning/control/run/artifact paths that equal, contain, or are contained by protected production/source roots; reject `/` and the current user's home directory. Resolve symlinks before comparison. Also reject `control_root` paths that would overlap the provider-owned `run_root/attempts` namespace.
 
-- [ ] **Step 3: Test launch preflight against frozen RunSpec dependencies**
+- [x] **Step 3: Test launch preflight against frozen RunSpec dependencies**
 
 Immediately before launch, preflight loads the RunSpec's ResolvedDataRefs/ResolvedConfiguration through the injected UoW and verifies at least:
 - `run_spec_hash` is the identity being checked;
@@ -379,7 +386,7 @@ Immediately before launch, preflight loads the RunSpec's ResolvedDataRefs/Resolv
 
 Return a short evidence dictionary suitable for `SubmissionIntentRecorded.preflight_evidence`. Any identity/revision/environment mismatch raises `PreflightFailed` before a RunAttempt/external side effect is created.
 
-- [ ] **Step 4: Add dry-run command**
+- [x] **Step 4: Add dry-run command**
 
 ```bash
 python -m examples.reference_integrations.genome_web_tf.acceptance \
@@ -389,7 +396,7 @@ python -m examples.reference_integrations.genome_web_tf.acceptance \
 
 Dry run prints pinned revision, resolved paths, requested logical resources, planned `ExecutionDescriptor`-driven adapter command, preflight checks, and policy outcomes. It does not execute the resolver/launcher.
 
-- [ ] **Step 5: Run and commit**
+- [x] **Step 5: Run and commit**
 
 Run:
 
@@ -415,7 +422,7 @@ git commit -m "feat: add Genome-web launch preflight and acceptance config"
 ### Task 5: Live Isolated Genome-web TF Acceptance Run
 
 **Files:**
-- Create after run: `docs/validation/records/<YYYY-MM-DD>-genome-web-tf-p0.md`
+- Created: `docs/validation/records/2026-09-19-genome-web-tf-p0.md`
 - Modify after run: `docs/architecture/scenario-validation-plan.md` only to update scenario status/link where supported by the new evidence record.
 - Runtime evidence remains outside git under the configured BioHarness run/artifact root.
 
@@ -423,7 +430,7 @@ git commit -m "feat: add Genome-web launch preflight and acceptance config"
 - Consumes: completed Core plan, completed reference adapters, designated remote/test environment.
 - Produces: fresh acceptance record for the reference slice.
 
-- [ ] **Step 1: Verify provider and implementation identity on the designated server**
+- [x] **Step 1: Verify provider and implementation identity on the designated server**
 
 Record:
 
@@ -436,7 +443,7 @@ input manifest SHA-256
 
 If the provider revision differs, stop; re-audit or pin the audited revision before using the capability snapshot.
 
-- [ ] **Step 2: Run dry-run isolation check remotely**
+- [x] **Step 2: Run dry-run isolation check remotely**
 
 ```bash
 python -m examples.reference_integrations.genome_web_tf.acceptance \
@@ -446,7 +453,7 @@ python -m examples.reference_integrations.genome_web_tf.acceptance \
 
 Expected: allowed protected read/resolve and candidate launch; denied production publication/canonical mutation; writable paths isolated.
 
-- [ ] **Step 3: Execute only through BioHarness governed flow**
+- [x] **Step 3: Execute only through BioHarness governed flow**
 
 ```text
 TaskSpec
@@ -466,11 +473,11 @@ TaskSpec
 
 Do not manually call the Genome-web launcher outside the RunAttempt when producing acceptance evidence.
 
-- [ ] **Step 4: Run negative fixture separately for cross-UID conflict**
+- [x] **Step 4: Run negative fixture separately for cross-UID conflict**
 
 Use a deliberately conflicting reference fixture and verify the external provider rejects it before scientific execution. Record the provider stderr/exit evidence; do not modify IDs to force progress.
 
-- [ ] **Step 5: Write one evidence record with catalog-required fields**
+- [x] **Step 5: Write one evidence record with catalog-required fields**
 
 For each observed scenario include:
 
@@ -491,7 +498,7 @@ supporting logs/artifacts/events
 
 Target reference scenarios: TF-01, TF-02, EXEC-01, EXEC-06, DATA-01. Only mark those actually executed.
 
-- [ ] **Step 6: Re-run Core CI without Genome-web checkout**
+- [x] **Step 6: Re-run Core CI without Genome-web checkout**
 
 Run:
 
@@ -501,7 +508,7 @@ python -m pytest tests/unit tests/contract tests/integration -q
 
 Expected: PASS. This demonstrates reference integration did not become a Core dependency.
 
-- [ ] **Step 7: Commit only evidence metadata/docs supported by the run**
+- [x] **Step 7: Commit only evidence metadata/docs supported by the run**
 
 ```bash
 git add docs/validation/records docs/architecture/scenario-validation-plan.md
